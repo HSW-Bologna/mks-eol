@@ -17,5 +17,7 @@ samples, guidance on mobile development, and a full API reference.
 
 ## TODO
 
-The `ViewUpdater` should be a repository, not a `Bloc` or `Cubit`. 
-The updating part should be handled by each page's specific `Bloc`, just managing messages and reactivity.
+ - Add `delayedOperator` target that allows the operator to skip only after a certain time
+ - The current target should only contain one current level; when started it tries to reach it with a certain step every certain period of time
+ - The `ViewUpdater` should be a repository, not a `Bloc` or `Cubit`. 
+    The updating part should be handled by each page's specific `Bloc`, just managing messages and reactivity.

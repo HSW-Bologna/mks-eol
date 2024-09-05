@@ -12,7 +12,30 @@ class DescriptiveTestStep extends TestStep {
 }
 
 @immutable
-class CurrentTestStep extends TestStep {}
+class DelayedTestStep extends TestStep {
+  final String description;
+  final String? imagePath;
+  final Duration delay;
+
+  DelayedTestStep(this.description, this.delay, {this.imagePath});
+}
+
+@immutable
+class CurrentTestStep extends TestStep {
+  final double currentTarget;
+  final double currentStep;
+  final double stepPeriod;
+  final String description;
+  final String? imagePath;
+
+  CurrentTestStep({
+    required this.currentTarget,
+    required this.currentStep,
+    required this.stepPeriod,
+    required this.description,
+    this.imagePath,
+  });
+}
 
 typedef MachineState = ({
   int voltage,
@@ -38,6 +61,7 @@ typedef Model = ({
   MachineState machineState,
   int testIndex,
   List<TestStep> testSteps,
+  DateTime timestamp,
 });
 
 final Model defaultModel = (
@@ -46,6 +70,7 @@ final Model defaultModel = (
   machineState: (voltage: 0, current: 0, power: 0, dcInput: false),
   testIndex: 0,
   testSteps: [],
+  timestamp: DateTime.now(),
 );
 
 extension Impl on Model {
@@ -55,6 +80,7 @@ extension Impl on Model {
     MachineState? machineState,
     int? testIndex,
     List<TestStep>? testSteps,
+    DateTime? timestamp,
   }) =>
       (
         serialPorts: serialPorts ?? this.serialPorts,
@@ -62,10 +88,19 @@ extension Impl on Model {
         machineState: machineState ?? this.machineState,
         testIndex: testIndex ?? this.testIndex,
         testSteps: testSteps ?? this.testSteps,
+        timestamp: timestamp ?? this.timestamp,
       );
 
-  Model moveToNextStep() =>
-      this.copyWith(testIndex: (this.testIndex + 1) % this.testSteps.length);
+  Model moveToNextStep() {
+    final newModel =
+        this.copyWith(testIndex: (this.testIndex + 1) % this.testSteps.length);
+    final newStep = newModel.getTestStep();
+    if (newStep != null && newStep is DelayedTestStep) {
+      return newModel.copyWith(timestamp: DateTime.now());
+    } else {
+      return newModel;
+    }
+  }
 
   Model updateMachineState(int voltage, int current, int power) =>
       this.copyWith(
@@ -85,4 +120,14 @@ extension Impl on Model {
 
   double getAmperes() => (this.machineState.current * 50.0) / 0xFFFF;
   double getVoltage() => (this.machineState.voltage * 1250.0) / 0xFFFF;
+
+  int getOperatorWaitTime() {
+    final step = this.getTestStep();
+    if (step != null && step is DelayedTestStep) {
+      return step.delay.inSeconds -
+          DateTime.now().difference(this.timestamp).inSeconds;
+    } else {
+      return 0;
+    }
+  }
 }
