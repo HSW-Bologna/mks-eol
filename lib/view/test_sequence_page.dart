@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -5,45 +7,29 @@ import 'package:mks_eol/controller/view_updater.dart';
 import 'package:mks_eol/model/model.dart';
 
 typedef _CurveTestStepState = ({
-  bool dcInput,
   int index,
   List<TextEditingController> currentControllers
 });
 
-extension Impl on _CurveTestStepView {}
-
 class _CurveTestStepCubit extends Cubit<_CurveTestStepState> {
   _CurveTestStepCubit()
       : super((
-          dcInput: false,
           index: 0,
           currentControllers: [0.2, 0.4, 0.6, 0.8, 1]
               .map((current) => TextEditingController(text: "$current"))
               .toList()
         ));
 
-  void next() {
+  _CurveTestStepState moveToNextStep() {
     this.emit((
-      dcInput: true,
       index: this.state.index + 1,
       currentControllers: this.state.currentControllers
     ));
+    return this.state;
   }
 
-  void off() {
-    this.emit((
-      dcInput: false,
-      index: 0,
-      currentControllers: this.state.currentControllers
-    ));
-  }
-
-  void on() {
-    this.emit((
-      dcInput: true,
-      index: 0,
-      currentControllers: this.state.currentControllers
-    ));
+  void resetStep() {
+    this.emit((index: 0, currentControllers: this.state.currentControllers));
   }
 }
 
@@ -61,7 +47,7 @@ class TestSequencePage extends StatelessWidget {
 }
 
 class _TestSequenceView extends StatelessWidget {
-  const _TestSequenceView({super.key});
+  const _TestSequenceView();
 
   @override
   Widget build(BuildContext context) {
@@ -72,7 +58,8 @@ class _TestSequenceView extends StatelessWidget {
         child: SizedBox.expand(
           child: switch (model.getTestStep()) {
             DescriptiveTestStep step => _DescriptiveTestStepView(step),
-            CurveTestStep step => _CurveTestStepView(step),
+            CurrentTestStep step => _CurveTestStepView(step),
+            null => const Center(child: Text("Loading...")),
           },
         ));
   }
@@ -81,7 +68,7 @@ class _TestSequenceView extends StatelessWidget {
 class _DescriptiveTestStepView extends StatelessWidget {
   final DescriptiveTestStep testStep;
 
-  const _DescriptiveTestStepView(this.testStep, {super.key});
+  const _DescriptiveTestStepView(this.testStep);
 
   @override
   Widget build(BuildContext context) {
@@ -90,16 +77,18 @@ class _DescriptiveTestStepView extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Expanded(
-          flex: 4,
+          flex: 1,
           child: Center(
               child:
                   Text(this.testStep.description, textAlign: TextAlign.center)),
         ),
+        if (this.testStep.imagePath != null)
+          Expanded(flex: 2, child: Image.file(File(this.testStep.imagePath!))),
         Expanded(
-          flex: 4,
+          flex: 1,
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
             ElevatedButton(
-              onPressed: () => context.read<ViewUpdater>().nextStep(),
+              onPressed: () => context.read<ViewUpdater>().moveToNextStep(),
               child: const Icon(Icons.check),
             )
           ]),
@@ -110,9 +99,9 @@ class _DescriptiveTestStepView extends StatelessWidget {
 }
 
 class _CurveTestStepView extends StatelessWidget {
-  final CurveTestStep testStep;
+  final CurrentTestStep testStep;
 
-  const _CurveTestStepView(this.testStep, {super.key});
+  const _CurveTestStepView(this.testStep);
 
   @override
   Widget build(BuildContext context) {
@@ -137,7 +126,9 @@ class _CurveTestStepView extends StatelessWidget {
                     ? BoxDecoration(
                         border: Border.all(
                             width: 4.0,
-                            color: state.dcInput ? Colors.orange : Colors.grey),
+                            color: model.machineState.dcInput
+                                ? Colors.orange
+                                : Colors.grey),
                       )
                     : null,
                 child: Padding(
@@ -165,21 +156,16 @@ class _CurveTestStepView extends StatelessWidget {
               final stateCubit = context.read<_CurveTestStepCubit>();
               final viewUpdater = context.read<ViewUpdater>();
 
-              if (!state.dcInput) {
-                stateCubit.on();
-                await viewUpdater.setCurrent(
+              if (!viewUpdater.state.machineState.dcInput) {
+                await viewUpdater.startCurrentTest(
                     double.parse(state.currentControllers[state.index].text));
-                await viewUpdater.dcInput(true);
               } else if (state.index < state.currentControllers.length - 1) {
-                stateCubit.next();
-                final state = stateCubit.state;
+                final state = stateCubit.moveToNextStep();
                 await viewUpdater.setCurrent(
                     double.parse(state.currentControllers[state.index].text));
               } else {
-                await viewUpdater.dcInput(false);
-                await viewUpdater.setCurrent(0);
-                viewUpdater.nextStep();
-                stateCubit.off();
+                await viewUpdater.stopCurrentTest();
+                stateCubit.resetStep();
               }
             },
             child: Icon(state.index < state.currentControllers.length - 1

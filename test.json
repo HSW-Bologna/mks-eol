@@ -1,0 +1,12 @@
+{
+    "steps": [
+        {
+            "target": "operator",
+            "description": "Initial step",
+            "image": "image.gif"
+        },
+        {
+            "target": "current"
+        }
+    ]
+}

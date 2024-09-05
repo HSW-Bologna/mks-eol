@@ -22,6 +22,8 @@ class App extends StatelessWidget {
         create: (_) {
           final cubit = ViewUpdater();
           cubit.refreshSerialPorts();
+          cubit.loadTestConfiguration();
+
           Timer.periodic(const Duration(seconds: 1), (_) {
             cubit.refreshSerialPorts();
             cubit.updateState();
@@ -31,10 +33,10 @@ class App extends StatelessWidget {
         child: Builder(builder: (context) {
           final model = context.watch<ViewUpdater>().state;
 
-          if (model.isConnected()) {
-          return const TestSequencePage();
+          if (model.isConnected() || true) {
+            return const TestSequencePage();
           } else {
-          return const HomePage();
+            return const HomePage();
           }
         }),
       ),
