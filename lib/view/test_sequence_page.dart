@@ -158,7 +158,7 @@ class _CurveTestStepView extends StatelessWidget {
         ),
         const SizedBox(height: 32),
         Text(
-            "State:\nVoltage: ${model.getVoltage()} V\nCurrent ${model.getAmperes()} A\n Power ${model.machineState.power}"),
+            "State:\nVoltage: ${model.getVoltage().toStringAsFixed(1)} V\nCurrent ${model.getAmperes().toStringAsFixed(1)} A\n Power ${model.machineState.power}"),
         const SizedBox(height: 32),
         ElevatedButton(
             onPressed: () async {
