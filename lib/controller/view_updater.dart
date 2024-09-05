@@ -1,4 +1,7 @@
+import 'dart:collection';
+import 'dart:convert';
 import 'dart:ffi';
+import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
@@ -16,36 +19,70 @@ const int _dcInputAddress = 405;
 const int _currentAddress = 501;
 const int _actualVoltageAddress = 507;
 
+const String _jsonSteps = "steps";
+const String _jsonTarget = "target";
+const String _jsonTargetOperator = "operator";
+const String _jsonTargetCurrent = "current";
+const String _jsonDescription = "description";
+const String _jsonImage = "image";
+
 class ViewUpdater extends Cubit<Model> {
   ViewUpdater() : super(defaultModel);
 
   void refreshSerialPorts() =>
       this.emit(this.state.copyWith(serialPorts: SerialPort.availablePorts));
 
+  Future<void> loadTestConfiguration() async {
+    final File file = File("test.json");
+    try {
+      final jsonContent = jsonDecode(await file.readAsString());
+      final List<dynamic> jsonSteps = jsonContent[_jsonSteps] as List<dynamic>;
+      this.emit(this.state.copyWith(
+          testSteps: jsonSteps.map(testStepFromJson).nonNulls.toList()));
+    } catch (e, s) {
+      logger.w("Invalid json!", error: e, stackTrace: s);
+    }
+  }
+
   void connectToPort(String port) async {
     //ModbusAppLogger(Level.ALL);
     this.emit(this.state.copyWith(connectedPort: Optional.of(port)));
     await this.writeCoil(_remoteModeAddress, true);
-    await this.dcInput(false);
+    await this._dcInput(false);
     await this.setCurrent(0);
   }
 
   void updateState() async {
     final rawState = await this._readHoldingRegisters(_actualVoltageAddress, 3);
     if (rawState.length >= 3) {
-      this.emit(this.state.copyWith(machineState: (
-        voltage: rawState[0],
-        current: rawState[1],
-        power: rawState[2],
-      )));
+      this.emit(this.state.updateMachineState(
+            rawState[0],
+            rawState[1],
+            rawState[2],
+          ));
     }
   }
 
-  void nextStep() => this.emit(this.state.nextStep());
+  void moveToNextStep() => this.emit(this.state.moveToNextStep());
 
-  Future<void> dcInput(bool enable) async {
+  Future<void> _dcInput(bool enable) async {
     logger.i("About to turn ${enable ? 'on' : 'off'} dcInput");
     await this.writeCoil(_dcInputAddress, enable);
+    this.emit(this.state.updateDcInput(enable));
+  }
+
+  Future<void> startCurrentTest(double amperes) async {
+    await this._dcInput(true);
+
+    final int value = (((amperes * 10) * 0xD0E5) / 400).floor();
+    logger.i("About to write $value to current register");
+    await this.writeHoldingRegister(_currentAddress, value);
+  }
+
+  Future<void> stopCurrentTest() async {
+    await this._dcInput(false);
+    await this.writeHoldingRegister(_currentAddress, 0);
+    this.moveToNextStep();
   }
 
   Future<void> setCurrent(double amperes) async {
@@ -134,3 +171,40 @@ class ViewUpdater extends Cubit<Model> {
         ));
   }
 }
+
+TestStep? testStepFromJson(dynamic json) {
+  try {
+    final jsonMap = json as Map<String, dynamic>;
+    final String? target = (jsonMap[_jsonTarget] as String?);
+
+    logger.i("Test $target");
+
+    if (target != null) {
+      switch (target) {
+        case _jsonTargetCurrent:
+          {
+            return CurrentTestStep();
+          }
+        case _jsonTargetOperator:
+          {
+            final String? description = cast<String>(jsonMap[_jsonDescription]);
+            final String? image = cast<String>(jsonMap[_jsonImage]);
+            if (description != null || image != null) {
+              return DescriptiveTestStep(description ?? "", imagePath: image);
+            } else {
+              return null;
+            }
+          }
+        default:
+          return null;
+      }
+    } else {
+      return null;
+    }
+  } catch (e, s) {
+    logger.w("Invalid json!", error: e, stackTrace: s);
+    return null;
+  }
+}
+
+T? cast<T>(dynamic value) => value is T ? value : null;
