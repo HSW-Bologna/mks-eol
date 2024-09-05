@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
 import 'dart:ffi';
@@ -22,9 +23,14 @@ const int _actualVoltageAddress = 507;
 const String _jsonSteps = "steps";
 const String _jsonTarget = "target";
 const String _jsonTargetOperator = "operator";
+const String _jsonTargetOperatorDelayed = "operatorDelayed";
 const String _jsonTargetCurrent = "current";
 const String _jsonDescription = "description";
 const String _jsonImage = "image";
+const String _jsonDelay = "delay";
+const String _jsonAmperes = "amperes";
+const String _jsonAmperesStep = "amperesStep";
+const String _jsonStepPeriod = "stepPeriod";
 
 class ViewUpdater extends Cubit<Model> {
   ViewUpdater() : super(defaultModel);
@@ -71,12 +77,25 @@ class ViewUpdater extends Cubit<Model> {
     this.emit(this.state.updateDcInput(enable));
   }
 
-  Future<void> startCurrentTest(double amperes) async {
+  Future<void> startCurrentTest(
+      double amperes, double amperesStep, double stepPeriod) async {
+    await this.writeHoldingRegister(_currentAddress, 0);
     await this._dcInput(true);
 
-    final int value = (((amperes * 10) * 0xD0E5) / 400).floor();
-    logger.i("About to write $value to current register");
-    await this.writeHoldingRegister(_currentAddress, value);
+    double current = 0;
+
+    while (current < amperes) {
+      await Future.delayed(Duration(milliseconds: (stepPeriod * 1000).floor()));
+
+      current += amperesStep;
+      if (current > amperes) {
+        current = amperes;
+      }
+
+      final int value = (((current * 10) * 0xD0E5) / 400).floor();
+      logger.i("About to write $value to current register");
+      await this.writeHoldingRegister(_currentAddress, value);
+    }
   }
 
   Future<void> stopCurrentTest() async {
@@ -183,7 +202,18 @@ TestStep? testStepFromJson(dynamic json) {
       switch (target) {
         case _jsonTargetCurrent:
           {
-            return CurrentTestStep();
+            final String? description = cast<String>(jsonMap[_jsonDescription]);
+            final String? image = cast<String>(jsonMap[_jsonImage]);
+            final double amperes = cast<double>(jsonMap[_jsonAmperes])!;
+            final double amperesStep = cast<double>(jsonMap[_jsonAmperesStep])!;
+            final double stepPeriod = cast<double>(jsonMap[_jsonStepPeriod])!;
+            return CurrentTestStep(
+              description: description ?? "",
+              imagePath: image,
+              currentTarget: amperes,
+              currentStep: amperesStep,
+              stepPeriod: stepPeriod,
+            );
           }
         case _jsonTargetOperator:
           {
@@ -191,6 +221,19 @@ TestStep? testStepFromJson(dynamic json) {
             final String? image = cast<String>(jsonMap[_jsonImage]);
             if (description != null || image != null) {
               return DescriptiveTestStep(description ?? "", imagePath: image);
+            } else {
+              return null;
+            }
+          }
+        case _jsonTargetOperatorDelayed:
+          {
+            final String? description = cast<String>(jsonMap[_jsonDescription]);
+            final String? image = cast<String>(jsonMap[_jsonImage]);
+            final int seconds = cast<num>(jsonMap[_jsonDelay])!.toInt();
+            if (description != null || image != null) {
+              return DelayedTestStep(
+                  description ?? "", Duration(seconds: seconds),
+                  imagePath: image);
             } else {
               return null;
             }

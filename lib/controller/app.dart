@@ -33,7 +33,7 @@ class App extends StatelessWidget {
         child: Builder(builder: (context) {
           final model = context.watch<ViewUpdater>().state;
 
-          if (model.isConnected() || true) {
+          if (model.isConnected()) {
             return const TestSequencePage();
           } else {
             return const HomePage();
