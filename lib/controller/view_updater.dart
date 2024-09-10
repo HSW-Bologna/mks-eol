@@ -1,11 +1,9 @@
 import 'dart:async';
 import 'dart:collection';
 import 'dart:convert';
-import 'dart:ffi';
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
 import 'package:mks_eol/model/model.dart';
@@ -13,10 +11,13 @@ import 'package:mks_eol/services/logger.dart';
 import 'package:modbus_client/modbus_client.dart';
 import 'package:modbus_client_serial/modbus_client_serial.dart';
 import 'package:optional/optional.dart';
+import 'package:result_type/result_type.dart';
 import 'package:logging/logging.dart';
 
+const int _deviceClassAddress = 0;
 const int _remoteModeAddress = 402;
 const int _dcInputAddress = 405;
+const int _voltageAddress = 500;
 const int _currentAddress = 501;
 const int _actualVoltageAddress = 507;
 
@@ -24,19 +25,18 @@ const String _jsonSteps = "steps";
 const String _jsonTarget = "target";
 const String _jsonTargetOperator = "operator";
 const String _jsonTargetOperatorDelayed = "operatorDelayed";
-const String _jsonTargetCurrent = "current";
+const String _jsonTargetLoad = "load";
 const String _jsonDescription = "description";
+const String _jsonElectronicLoad = "electronicLoad";
 const String _jsonImage = "image";
 const String _jsonDelay = "delay";
-const String _jsonAmperes = "amperes";
-const String _jsonAmperesStep = "amperesStep";
-const String _jsonStepPeriod = "stepPeriod";
+const String _jsonCurrent = "current";
+const String _jsonVoltage = "voltage";
+const String _jsonStep = "step";
+const String _jsonPeriod = "period";
 
 class ViewUpdater extends Cubit<Model> {
   ViewUpdater() : super(defaultModel);
-
-  void refreshSerialPorts() =>
-      this.emit(this.state.copyWith(serialPorts: SerialPort.availablePorts));
 
   Future<void> loadTestConfiguration() async {
     final File file = File("test.json");
@@ -50,169 +50,280 @@ class ViewUpdater extends Cubit<Model> {
     }
   }
 
-  void connectToPort(String port) async {
-    //ModbusAppLogger(Level.ALL);
-    this.emit(this.state.copyWith(connectedPort: Optional.of(port)));
-    await this.writeCoil(_remoteModeAddress, true);
-    await this._dcInput(false);
-    await this.setCurrent(0);
+  Future<void> findPorts() async {
+    ModbusAppLogger(Level.FINE);
+
+    final ports = SerialPort.availablePorts;
+
+    ModbusClientSerialRtu? firstPort = null;
+    ModbusClientSerialRtu? secondPort = null;
+
+    this.emit(this.state.copyWith(ports: const Optional.empty()));
+
+    for (final port in ports) {
+      logger.i("Trying port ${port}");
+
+      for (int address = 0; address <= 1; address++) {
+        try {
+          final client = ModbusClientSerialRtu(
+            portName: port,
+            connectionMode: ModbusConnectionMode.autoConnectAndDisconnect,
+            dataBits: SerialDataBits.bits8,
+            stopBits: SerialStopBits.one,
+            parity: SerialParity.none,
+            baudRate: SerialBaudRate.b115200,
+            flowControl: SerialFlowControl.none,
+            unitId: address,
+          );
+
+          final int deviceType =
+              await this._readHoldingRegister(client, _deviceClassAddress);
+          logger.i("Device type found ${deviceType}");
+          switch (deviceType) {
+            case 59:
+              firstPort = client;
+              break;
+            case 33:
+              secondPort = client;
+              break;
+            case 0xbeef:
+              break;
+          }
+        } catch (e, s) {
+          logger.i("Unable to open port ${port}", error: e, stackTrace: s);
+        }
+      }
+    }
+
+    if (firstPort == null) {
+      this.emit(this.state.copyWith(
+          ports: Optional.of(Failure("Primo carico elettronico non trovato"))));
+    } else if (secondPort == null) {
+      this.emit(this.state.copyWith(
+          ports:
+              Optional.of(Failure("Secondo carico elettronico non trovato"))));
+    } else {
+      this.emit(this.state.copyWith(
+              ports: Optional.of(Success((
+            firstElectronicLoad: firstPort,
+            secondElectronicLoad: secondPort
+          )))));
+      logger.i(
+          "Successfully connected to ${firstPort.serialPort.name} / ${secondPort.serialPort.name}");
+
+      for (final load in ElectronicLoad.values) {
+        final port = this.state.getElectronicLoadPort(load)!;
+        await this.writeCoil(port, _remoteModeAddress, true);
+        await this._dcInput(load, false);
+        await this.writeHoldingRegister(port, _currentAddress, 0);
+        await this.writeHoldingRegister(port, _voltageAddress, 0);
+      }
+    }
   }
 
   void updateState() async {
-    final rawState = await this._readHoldingRegisters(_actualVoltageAddress, 3);
-    if (rawState.length >= 3) {
-      this.emit(this.state.updateMachineState(
-            rawState[0],
-            rawState[1],
-            rawState[2],
-          ));
-    }
-  }
-
-  void moveToNextStep() => this.emit(this.state.moveToNextStep());
-
-  Future<void> _dcInput(bool enable) async {
-    logger.i("About to turn ${enable ? 'on' : 'off'} dcInput");
-    await this.writeCoil(_dcInputAddress, enable);
-    this.emit(this.state.updateDcInput(enable));
-  }
-
-  Future<void> startCurrentTest(
-      double amperes, double amperesStep, double stepPeriod) async {
-    await this.writeHoldingRegister(_currentAddress, 0);
-    await this._dcInput(true);
-
-    double current = 0;
-
-    while (current < amperes) {
-      await Future.delayed(Duration(milliseconds: (stepPeriod * 1000).floor()));
-
-      current += amperesStep;
-      if (current > amperes) {
-        current = amperes;
+    if (this.state.isConnected()) {
+      for (final load in ElectronicLoad.values) {
+        final rawState = await this._readHoldingRegisters(
+            this.state.getElectronicLoadPort(load)!, _actualVoltageAddress, 3);
+        if (rawState.length >= 3) {
+          this.emit(this.state.updateElectronicLoadState(
+                load,
+                rawState[0],
+                rawState[1],
+                rawState[2],
+              ));
+        }
       }
-
-      final int value = (((current * 10) * 0xD0E5) / 400).floor();
-      logger.i("About to write $value to current register");
-      await this.writeHoldingRegister(_currentAddress, value);
     }
+    this.emit(this.state.updateOperatorWaitTime());
+  }
+
+  Future<void> moveToNextStep() async {
+    for (final load in ElectronicLoad.values) {
+      final port = this.state.getElectronicLoadPort(load)!;
+      await this.writeCoil(port, _remoteModeAddress, true);
+      await this._dcInput(load, false);
+      await this.writeHoldingRegister(port, _currentAddress, 0);
+      await this.writeHoldingRegister(port, _voltageAddress, 0);
+    }
+    this.emit(this.state.moveToNextStep());
+  }
+
+  Future<void> _dcInput(ElectronicLoad electronicLoad, bool enable) async {
+    logger.i("About to turn ${enable ? 'on' : 'off'} dcInput");
+    await this.writeCoil(this.state.getElectronicLoadPort(electronicLoad)!,
+        _dcInputAddress, enable);
+    this.emit(this.state.updateDcInput(electronicLoad, enable));
+  }
+
+  Future<void> currentCurve(ElectronicLoad electronicLoad, double amperes,
+      double amperesStep, double stepPeriod) async {
+    await this._curve(
+        electronicLoad: electronicLoad,
+        address: _currentAddress,
+        target: amperes,
+        step: amperesStep,
+        stepPeriod: stepPeriod,
+        maxX: 0xD0E5,
+        maxY: 40);
+  }
+
+  Future<void> voltageCurve(ElectronicLoad electronicLoad, double volts,
+      double voltsStep, double stepPeriod) async {
+    await this._curve(
+        electronicLoad: electronicLoad,
+        address: _voltageAddress,
+        target: volts,
+        step: voltsStep,
+        stepPeriod: stepPeriod,
+        maxX: 0xD0E5,
+        maxY: 1000);
   }
 
   Future<void> stopCurrentTest() async {
-    await this._dcInput(false);
-    await this.writeHoldingRegister(_currentAddress, 0);
+    for (final load in ElectronicLoad.values) {
+      await this._dcInput(load, false);
+      final port = this.state.getElectronicLoadPort(load)!;
+
+      await this.writeHoldingRegister(port, _currentAddress, 0);
+      await this.writeHoldingRegister(port, _voltageAddress, 0);
+    }
     this.moveToNextStep();
   }
 
-  Future<void> setCurrent(double amperes) async {
-    final int value = (((amperes * 10) * 0xD0E5) / 400).floor();
-    logger.i("About to write $value to current register");
-    await this.writeHoldingRegister(_currentAddress, value);
+  Future<List<int>> _readHoldingRegisters(
+      ModbusClientSerialRtu client, int address, int number) async {
+    Uint8List bytes = Uint8List(number * 2);
+
+    final register = ModbusBytesRegister(
+      name: "register $address",
+      type: ModbusElementType.holdingRegister,
+      address: address,
+      byteCount: number * 2,
+    );
+
+    await client.send(
+      register.getReadRequest(),
+    );
+
+    bytes = register.value ?? bytes;
+
+    return List.generate(number, (index) => index * 2)
+        .map((i) => bytes[i] << 8 | bytes[i + 1])
+        .toList();
   }
 
-  Future<List<int>> _readHoldingRegisters(int address, int number) async =>
-      this._getModbusClient().map((client) async {
-        Uint8List bytes = Uint8List(number * 2);
+  Future<int> _readHoldingRegister(
+          ModbusClientSerialRtu client, int address) async =>
+      (await this._readHoldingRegisters(client, address, 1))
+          .elementAtOrNull(0) ??
+      0;
 
-        final register = ModbusBytesRegister(
-          name: "register $address",
-          type: ModbusElementType.holdingRegister,
-          address: address,
-          byteCount: number * 2,
-        );
+  Future<bool> readCoil(ModbusClientSerialRtu client, int address) async {
+    final register = ModbusUint16Register(
+      name: "register",
+      type: ModbusElementType.coil,
+      address: address,
+    );
 
-        await client.send(
-          register.getReadRequest(),
-        );
+    await client.send(
+      register.getReadRequest(),
+    );
 
-        bytes = register.value ?? bytes;
+    return (register.value as bool?) ?? false;
+  }
 
-        return List.generate(number, (index) => index * 2)
-            .map((i) => bytes[i] << 8 | bytes[i + 1])
-            .toList();
-      }).orElse(Future.value([]));
+  Future<void> writeCoil(
+      ModbusClientSerialRtu client, int address, bool value) async {
+    await client.send(
+      ModbusUint16Register(
+        name: "register",
+        type: ModbusElementType.coil,
+        address: address,
+      ).getWriteRequest(value ? 0xFF00 : 0x0000),
+    );
+  }
 
-  Future<int> readHoldingRegister(int address) async =>
-      (await this._readHoldingRegisters(address, 1)).elementAtOrNull(0) ?? 0;
+  Future<void> writeHoldingRegister(
+      ModbusClientSerialRtu client, int address, int value) async {
+    await client.send(
+      ModbusUint16Register(
+        name: "register",
+        type: ModbusElementType.holdingRegister,
+        address: address,
+      ).getWriteRequest(value),
+    );
+  }
 
-  Future<bool> readCoil(int address) async =>
-      this._getModbusClient().map((client) async {
-        final register = ModbusUint16Register(
-          name: "register",
-          type: ModbusElementType.coil,
-          address: address,
-        );
-
-        await client.send(
-          register.getReadRequest(),
-        );
-
-        return (register.value as bool?) ?? false;
-      }).orElse(Future.value(false));
-
-  Future<void> writeCoil(int address, bool value) async {
-    final client = this._getModbusClient();
-
-    if (client.isPresent) {
-      await client.value.send(
-        ModbusUint16Register(
-          name: "register",
-          type: ModbusElementType.coil,
-          address: address,
-        ).getWriteRequest(value ? 0xFF00 : 0x0000),
-      );
+  Future<void> _curve({
+    required ElectronicLoad electronicLoad,
+    required int address,
+    required double target,
+    required double step,
+    required double stepPeriod,
+    required double maxX,
+    required double maxY,
+  }) async {
+    final port = this.state.getElectronicLoadPort(electronicLoad);
+    logger.i("Curving ${address} on port ${port?.serialPort.name}");
+    if (port == null) {
+      return;
     }
-  }
 
-  Future<void> writeHoldingRegister(int address, int value) async {
-    final client = this._getModbusClient();
-    if (client.isPresent) {
-      await client.value.send(
-        ModbusUint16Register(
-          name: "register",
-          type: ModbusElementType.holdingRegister,
-          address: address,
-        ).getWriteRequest(value),
-      );
+    await this.writeHoldingRegister(port, _voltageAddress, 0);
+    await this._dcInput(electronicLoad, true);
+
+    double actualValue = 0;
+
+    while (actualValue < target) {
+      await Future.delayed(Duration(milliseconds: (stepPeriod * 1000).floor()));
+
+      actualValue += step;
+      if (actualValue > target) {
+        actualValue = target;
+      }
+
+      final int value = (((actualValue * 10) * maxX) / (maxY * 10)).floor();
+      await this.writeHoldingRegister(port, address, value);
     }
-  }
-
-  Optional<ModbusClientSerialRtu> _getModbusClient() {
-    return this.state.connectedPort.map((port) => ModbusClientSerialRtu(
-          portName: port,
-          connectionMode: ModbusConnectionMode.autoConnectAndDisconnect,
-          dataBits: SerialDataBits.bits8,
-          stopBits: SerialStopBits.one,
-          parity: SerialParity.none,
-          baudRate: SerialBaudRate.b115200,
-          flowControl: SerialFlowControl.none,
-          unitId: 0,
-        ));
   }
 }
 
 TestStep? testStepFromJson(dynamic json) {
+  Curve? curveFromJson(Map<String, dynamic>? jsonMap) {
+    try {
+      final double target = cast<num?>(jsonMap![_jsonTarget])!.toDouble();
+      final double step = cast<num>(jsonMap[_jsonStep])!.toDouble();
+      final double period = cast<num>(jsonMap[_jsonPeriod])!.toDouble();
+      return (target: target, step: step, period: period);
+    } catch (_) {
+      return null;
+    }
+  }
+
   try {
     final jsonMap = json as Map<String, dynamic>;
     final String? target = (jsonMap[_jsonTarget] as String?);
 
-    logger.i("Test $target");
-
     if (target != null) {
       switch (target) {
-        case _jsonTargetCurrent:
+        case _jsonTargetLoad:
           {
+            final ElectronicLoad electronicLoad = ElectronicLoad
+                .values[cast<int?>(jsonMap[_jsonElectronicLoad])!];
             final String? description = cast<String>(jsonMap[_jsonDescription]);
             final String? image = cast<String>(jsonMap[_jsonImage]);
-            final double amperes = cast<double>(jsonMap[_jsonAmperes])!;
-            final double amperesStep = cast<double>(jsonMap[_jsonAmperesStep])!;
-            final double stepPeriod = cast<double>(jsonMap[_jsonStepPeriod])!;
-            return CurrentTestStep(
+
+            final Curve? current = curveFromJson(jsonMap[_jsonCurrent]);
+            final Curve? voltage = curveFromJson(jsonMap[_jsonVoltage]);
+
+            return LoadTestStep(
+              electronicLoad: electronicLoad,
               description: description ?? "",
               imagePath: image,
-              currentTarget: amperes,
-              currentStep: amperesStep,
-              stepPeriod: stepPeriod,
+              currentCurve: current,
+              voltageCurve: voltage,
             );
           }
         case _jsonTargetOperator:

@@ -1,6 +1,5 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mks_eol/controller/view_updater.dart';
 import 'package:mks_eol/model/model.dart';
@@ -124,7 +123,19 @@ class HomePage extends StatelessWidget {
                   mainAxisAlignment: MainAxisAlignment.center,
                   crossAxisAlignment: CrossAxisAlignment.center,
                   children: [
-                    DropdownMenu<String>(
+                    if (model.ports.isPresent) ...[
+                      Text(
+                          "Ricerca dei dispositivi fallita: ${model.ports.value.failure}"),
+                      const SizedBox(height: 16),
+                      ElevatedButton(
+                          onPressed: () =>
+                              context.read<ViewUpdater>().findPorts(),
+                          child: const Text("Riprova")),
+                    ],
+                    if (model.ports.isEmpty) ...[
+                      const Text("Caricamento"),
+                    ],
+                    /*DropdownMenu<String>(
                       initialSelection: model.connectedPort.orElseNull,
                       onSelected: (String? value) {
                         if (value != null) {
@@ -136,60 +147,7 @@ class HomePage extends StatelessWidget {
                         return DropdownMenuEntry<String>(
                             value: value, label: value);
                       }).toList(),
-                    ),
-                    if (model.isConnected()) ...[
-                      registerOperation(
-                        pageCubit.state.holdingRegisterValueController,
-                        "Holding register",
-                        (address, value) {
-                          if (address != null) {
-                            context
-                                .read<_PageCubit>()
-                                .updateHoldingRegisterAddress(address);
-                          }
-                          if (value != null) {
-                            pageCubit.updateHoldingRegisterValue(value);
-                          }
-                        },
-                        () async {
-                          final register = await context
-                              .read<ViewUpdater>()
-                              .readHoldingRegister(
-                                  pageCubit.state.holdingRegisterAddress);
-                          pageCubit.state.holdingRegisterValueController.text =
-                              register.toString();
-                        },
-                        () => context.read<ViewUpdater>().writeHoldingRegister(
-                            pageCubit.state.holdingRegisterAddress,
-                            pageCubit.state.holdingRegisterValue),
-                      ),
-                      registerOperation(
-                        pageCubit.state.coilValueController,
-                        "Coil",
-                        (address, value) {
-                          if (address != null) {
-                            context
-                                .read<_PageCubit>()
-                                .updateCoilAddress(address);
-                          }
-                          if (value != null) {
-                            pageCubit.updateCoilValue(value);
-                          }
-                        },
-                        () async {
-                          final register = await context
-                              .read<ViewUpdater>()
-                              .readCoil(pageCubit.state.holdingRegisterAddress);
-                          pageCubit.state.coilValueController.text =
-                              register ? 0xFF00.toString() : "0";
-                        },
-                        () => context.read<ViewUpdater>().writeCoil(
-                            pageCubit.state.coilAddress,
-                            pageCubit.state.coilValue > 0),
-                      ),
-                      Text(
-                          "State:\nVoltage: ${model.machineState.voltage}\nCurrent ${model.machineState.current}\n Power ${model.machineState.power}"),
-                    ],
+                    ),*/
                   ]),
             ),
           );

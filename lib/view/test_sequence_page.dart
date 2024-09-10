@@ -1,7 +1,6 @@
 import 'dart:io';
 
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mks_eol/controller/view_updater.dart';
 import 'package:mks_eol/model/model.dart';
@@ -9,15 +8,20 @@ import 'package:mks_eol/services/logger.dart';
 
 enum _CurrentTestStepState {
   ready,
-  ramp,
+  currentRamp,
+  voltageRamp,
   done,
 }
 
 class _CurveTestStepCubit extends Cubit<_CurrentTestStepState> {
   _CurveTestStepCubit() : super(_CurrentTestStepState.ready);
 
-  void startRamp() {
-    this.emit(_CurrentTestStepState.ramp);
+  void startCurrentRamp() {
+    this.emit(_CurrentTestStepState.currentRamp);
+  }
+
+  void startVoltageRamp() {
+    this.emit(_CurrentTestStepState.voltageRamp);
   }
 
   void rampDone() {
@@ -55,8 +59,8 @@ class _TestSequenceView extends StatelessWidget {
           child: switch (model.getTestStep()) {
             DescriptiveTestStep step => _DescriptiveTestStepView(step),
             DelayedTestStep step => _DelayedTestStepView(step),
-            CurrentTestStep step => _CurveTestStepView(step),
-            null => const Center(child: Text("Loading...")),
+            LoadTestStep step => _CurveTestStepView(step),
+            null => const Center(child: Text("Attendere...")),
           },
         ));
   }
@@ -69,8 +73,8 @@ class _DelayedTestStepView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final model = context.watch<ViewUpdater>().state;
-    final remainingSeconds = model.getOperatorWaitTime();
+    final remainingSeconds =
+        context.watch<ViewUpdater>().state.getOperatorWaitTime();
     logger.i("$remainingSeconds");
 
     return Center(
@@ -138,7 +142,7 @@ class _DescriptiveTestStepView extends StatelessWidget {
 }
 
 class _CurveTestStepView extends StatelessWidget {
-  final CurrentTestStep testStep;
+  final LoadTestStep testStep;
 
   const _CurveTestStepView(this.testStep);
 
@@ -146,19 +150,24 @@ class _CurveTestStepView extends StatelessWidget {
   Widget build(BuildContext context) {
     final state = context.watch<_CurveTestStepCubit>().state;
     final model = context.watch<ViewUpdater>().state;
+    final electronicLoad = this.testStep.electronicLoad;
 
     return Center(
         child: Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         Text(
-            "State:\nVoltage: ${model.getVoltage()} V\nCurrent ${model.getAmperes()} A\n Power ${model.machineState.power}"),
+            "State:\nVoltage: ${model.getVoltage(electronicLoad)} V\nCurrent ${model.getAmperes(electronicLoad)} A\n Power ${model.getElectronicLoadState(electronicLoad).power}"),
         const SizedBox(height: 32),
         ...switch (state) {
           _CurrentTestStepState.ready => [
-              Text("Test di raggiungimento ${this.testStep.currentTarget} A")
+              Text(
+                  "Test di raggiungimento ${this.testStep.currentCurve?.target ?? 0.0} A / ${this.testStep.voltageCurve?.target ?? 0.0} V")
             ],
-          _CurrentTestStepState.ramp => [
+          _CurrentTestStepState.voltageRamp => [
+              const Text("Incremento della tensione in corso...")
+            ],
+          _CurrentTestStepState.currentRamp => [
               const Text("Incremento della corrente in corso...")
             ],
           _CurrentTestStepState.done => [
@@ -173,20 +182,40 @@ class _CurveTestStepView extends StatelessWidget {
               onPressed: () async {
                 final stateCubit = context.read<_CurveTestStepCubit>();
                 final viewUpdater = context.read<ViewUpdater>();
+                logger.i("Testing load ${electronicLoad}");
 
-                stateCubit.startRamp();
-                await viewUpdater.startCurrentTest(this.testStep.currentTarget,
-                    this.testStep.currentStep, this.testStep.stepPeriod);
+                if (this.testStep.currentCurve != null) {
+                  stateCubit.startCurrentRamp();
+                  await viewUpdater.currentCurve(
+                    electronicLoad,
+                    this.testStep.currentCurve!.target,
+                    this.testStep.currentCurve!.step,
+                    this.testStep.currentCurve!.period,
+                  );
+                }
+                if (this.testStep.voltageCurve != null) {
+                  stateCubit.startVoltageRamp();
+                  await viewUpdater.voltageCurve(
+                    electronicLoad,
+                    this.testStep.voltageCurve!.target,
+                    this.testStep.voltageCurve!.step,
+                    this.testStep.voltageCurve!.period,
+                  );
+                }
+
                 stateCubit.rampDone();
               },
               child: const Icon(Icons.skip_next)),
-          _CurrentTestStepState.ramp => const SizedBox(),
           _CurrentTestStepState.done => ElevatedButton(
               onPressed: () async {
                 final viewUpdater = context.read<ViewUpdater>();
-                viewUpdater.moveToNextStep();
+                final stateCubit = context.read<_CurveTestStepCubit>();
+
+                await viewUpdater.moveToNextStep();
+                stateCubit.resetStep();
               },
               child: const Icon(Icons.check)),
+          _ => const SizedBox(),
         },
       ],
     ));

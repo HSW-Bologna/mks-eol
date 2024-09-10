@@ -6,12 +6,31 @@
             "image": "image.gif"
         },
         {
-            "target": "current",
+            "target": "load",
+            "electronicLoad": 0,
             "description": "Test corrente",
             "image": "image.gif",
-            "amperes": 2.0,
-            "amperesStep": 0.250,
-            "stepPeriod": 0.2
+            "current": {
+                "target": 2.0,
+                "step": 0.250,
+                "period": 0.2
+            }
+        },
+        {
+            "target": "load",
+            "electronicLoad": 1,
+            "description": "Test tensione",
+            "image": "image.gif",
+            "current": {
+                "target": 10.0,
+                "step": 0.5,
+                "period": 0.2
+            },
+            "voltage": {
+                "target": 100,
+                "step": 10,
+                "period": 0.5
+            }
         },
         {
             "target": "operatorDelayed",
