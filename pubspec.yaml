@@ -41,6 +41,7 @@ dependencies:
   modbus_client: ^1.4.0
   modbus_client_serial: ^1.3.0
   logger: ^2.0.2+1
+  result_type: ^0.2.0
 
 dev_dependencies:
   flutter_test:
