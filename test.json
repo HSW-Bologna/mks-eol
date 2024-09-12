@@ -2,41 +2,138 @@
     "steps": [
         {
             "target": "operator",
-            "description": "Initial step",
-            "image": "image.gif"
+            "title": "Test rigidita' elettrica",
+            "description": "Collegare i terminali dell'unita' test rigidita' dielettrica a J12, J13 e J14 come da immagine",
+            "images": "assets/rigidita-elettrica.jpg"
+        },
+        {
+            "target": "operator",
+            "description": "Verificare che sia selezionato il test \"HVAC Prova DC\"\nChiudere lo sportello, sganciare l'emergenza, premere il pulsante \"ripristina ausiliari\" ed eseguire il test premendo i due pulsanti verdi",
+            "images": "assets/test-hvac.jpg"
+        },
+        {
+            "target": "operator",
+            "description": "Verificare l'esito positivo del test",
+            "images": "assets/test-hvac-ok.jpg"
+        },
+        {
+            "target": "operator",
+            "description": "Premere il tasto di emergenza e aprire lo sportello.\nScollegare i cavi da J12, J13 e J14"
+        },
+        {
+            "target": "operator",
+            "title": "Test a bassa tensione",
+            "description": "Verificare che il ponticello SPAD6 sia aperto\nPortare il variac a 0 V\nCollegare i cavi di alimentazione ai terminali J12, J13 e J14\nCollegare i cavi 1114/1115 ai terminali di uscita del PFC\nPosizionare il selettore su limite 4 A\nCollegare le sonde\nChiudere lo sportello",
+            "images": [
+                "assets/cavi-1114-1115.jpg",
+                "assets/terminali-uscita-pfc.jpg"
+            ]
+        },
+        {
+            "target": "operator",
+            "description": "Verificare che il LED PFC sia spento sulla scheda di controllo",
+            "images": "assets/led-pfc.jpg"
+        },
+        {
+            "target": "operator",
+            "description": "Portare la tensione del variac a 42 V e verificare che il LED PFC si accenda",
+            "images": "assets/led-pfc.jpg"
+        },
+        {
+            "target": "operator",
+            "description": "Verificare sull'oscilloscopio che la tensione di uscita sia 80 V"
         },
         {
             "target": "load",
             "electronicLoad": 0,
-            "description": "Test corrente",
-            "image": "image.gif",
+            "title": "Test a bassa tensione",
+            "description": "Verifico carico a bassa tensione",
+            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 180 Watt",
             "current": {
                 "target": 2.0,
-                "step": 0.250,
+                "step": 0.5,
                 "period": 0.2
             }
         },
         {
+            "target": "operator",
+            "description": "Spegnere il variac e premere il tasto di emergenza per aprire il portello"
+        },
+        {
+            "target": "operator",
+            "description": "Saldare il ponticello SPAD\nConfigurare l'oscilloscopio a 200 V/Div, 5 ms/Div e trigger sulla rete"
+        },
+        {
+            "target": "operator",
+            "description": "Chiudere la copertura e accendere gli ausiliari"
+        },
+        {
+            "target": "operator",
+            "description": "Accendere il variac e portarlo a 390 V"
+        },
+        {
+            "target": "operator",
+            "description": "Verificare che il LED del PFC sia acceso\nVerificare sull'oscilloscopio che la tensione di uscita sia 750 V (+/- 10 V)"
+        },
+        {
             "target": "load",
-            "electronicLoad": 1,
-            "description": "Test tensione",
-            "image": "image.gif",
+            "electronicLoad": 0,
+            "title": "Test ad alta tensione",
+            "description": "",
+            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 1580 Watt",
+            "current": {
+                "target": 2.0,
+                "step": 0.5,
+                "period": 0.2
+            },
+            "zeroWhenFinished": false
+        },
+        {
+            "target": "operator",
+            "description": "Rimuovere il limite di corrente dal selettore principale"
+        },
+        {
+            "target": "load",
+            "electronicLoad": 0,
+            "title": "Test ad alta tensione",
+            "description": "",
+            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 3900 Watt",
+            "current": {
+                "target": 5.0,
+                "step": 0.5,
+                "period": 0.2
+            },
+            "zeroWhenFinished": false
+        },
+        {
+            "target": "load",
+            "electronicLoad": 0,
+            "title": "Test ad alta tensione",
+            "description": "",
+            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 7700 Watt",
             "current": {
                 "target": 10.0,
                 "step": 0.5,
                 "period": 0.2
             },
-            "voltage": {
-                "target": 100,
-                "step": 10,
-                "period": 0.5
+            "zeroWhenFinished": false
+        },
+        {
+            "target": "load",
+            "electronicLoad": 0,
+            "title": "Test ad alta tensione",
+            "description": "",
+            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 7700 Watt",
+            "current": {
+                "target": 15.0,
+                "step": 0.5,
+                "period": 0.2
             }
         },
         {
-            "target": "operatorDelayed",
-            "description": "Attendere",
-            "image": "image.gif",
-            "delay": 5
+            "target": "operator",
+            "description": "Premere il tasto di emergenza; aspettare 30 secondi prima di aprire lo sportello",
+            "delay" : 30
         }
     ]
 }

@@ -5,11 +5,9 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:mks_eol/controller/view_updater.dart';
 import 'package:mks_eol/model/model.dart';
-import 'package:mks_eol/services/logger.dart';
 import 'package:mks_eol/view/home_page.dart';
 import 'package:mks_eol/view/test_sequence_page.dart';
 import 'package:mks_eol/view/theme.dart';
-import 'package:modbus_client/modbus_client.dart';
 
 class App extends StatelessWidget {
   const App({super.key});

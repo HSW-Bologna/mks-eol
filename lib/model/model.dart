@@ -12,19 +12,17 @@ sealed class TestStep {}
 
 @immutable
 class DescriptiveTestStep extends TestStep {
+  final String title;
   final String description;
-  final String? imagePath;
-
-  DescriptiveTestStep(this.description, {this.imagePath});
-}
-
-@immutable
-class DelayedTestStep extends TestStep {
-  final String description;
-  final String? imagePath;
+  final List<String> imagePaths;
   final Duration delay;
 
-  DelayedTestStep(this.description, this.delay, {this.imagePath});
+  DescriptiveTestStep(
+    this.title,
+    this.description, {
+    this.imagePaths = const <String>[],
+    this.delay = const Duration(seconds: 0),
+  });
 }
 
 typedef Curve = ({
@@ -35,18 +33,24 @@ typedef Curve = ({
 
 @immutable
 class LoadTestStep extends TestStep {
+  final String title;
   final ElectronicLoad electronicLoad;
   final Curve? currentCurve;
   final Curve? voltageCurve;
   final String description;
-  final String? imagePath;
+  final String finalDescription;
+  final List<String> imagePaths;
+  final bool zeroWhenFinished;
 
   LoadTestStep({
     required this.electronicLoad,
+    required this.title,
     required this.description,
+    required this.finalDescription,
     this.currentCurve,
     this.voltageCurve,
-    this.imagePath,
+    this.imagePaths = const <String>[],
+    this.zeroWhenFinished = true,
   });
 }
 
@@ -55,14 +59,24 @@ typedef ElectronicLoadState = ({
   int current,
   int power,
   bool dcInput,
+  double setVoltage,
+  double setCurrent,
 });
 
 extension MachineStateImpl on ElectronicLoadState {
-  ElectronicLoadState copyWith(
-          {int? voltage, int? current, int? power, bool? dcInput}) =>
+  ElectronicLoadState copyWith({
+    int? voltage,
+    int? current,
+    int? power,
+    bool? dcInput,
+    double? setVoltage,
+    double? setCurrent,
+  }) =>
       (
         voltage: voltage ?? this.voltage,
         current: current ?? this.current,
+        setVoltage: setVoltage ?? this.setVoltage,
+        setCurrent: setCurrent ?? this.setCurrent,
         power: power ?? this.power,
         dcInput: dcInput ?? this.dcInput
       );
@@ -88,12 +102,16 @@ final Model defaultModel = (
   currentElectronicLoadState: (
     voltage: 0,
     current: 0,
+    setVoltage: 0,
+    setCurrent: 0,
     power: 0,
     dcInput: false
   ),
   voltageElectronicLoadState: (
     voltage: 0,
     current: 0,
+    setVoltage: 0,
+    setCurrent: 0,
     power: 0,
     dcInput: false
   ),
@@ -129,7 +147,9 @@ extension Impl on Model {
     final newModel =
         this.copyWith(testIndex: (this.testIndex + 1) % this.testSteps.length);
     final newStep = newModel.getTestStep();
-    if (newStep != null && newStep is DelayedTestStep) {
+    if (newStep != null &&
+        newStep is DescriptiveTestStep &&
+        newStep.delay.inSeconds > 0) {
       return newModel.copyWith(timestamp: DateTime.now());
     } else {
       return newModel;
@@ -141,6 +161,13 @@ extension Impl on Model {
     final state = this.getElectronicLoadState(electronicLoad);
     return this._updateElectronicLoadState(electronicLoad,
         state.copyWith(voltage: voltage, current: current, power: power));
+  }
+
+  Model setElectronicLoadValues(ElectronicLoad electronicLoad,
+      {double? setVoltage, double? setCurrent}) {
+    final state = this.getElectronicLoadState(electronicLoad);
+    return this._updateElectronicLoadState(electronicLoad,
+        state.copyWith(setVoltage: setVoltage, setCurrent: setCurrent));
   }
 
   Model updateDcInput(ElectronicLoad electronicLoad, bool enable) {
@@ -168,7 +195,9 @@ extension Impl on Model {
 
   Model updateOperatorWaitTime() {
     final step = this.getTestStep();
-    if (step != null && step is DelayedTestStep) {
+    if (step != null &&
+        step is DescriptiveTestStep &&
+        step.delay.inSeconds > 0) {
       return this.copyWith(
           remainingDuration:
               step.delay - DateTime.now().difference(this.timestamp));

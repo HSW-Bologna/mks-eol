@@ -7,12 +7,12 @@ import 'dart:typed_data';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter_libserialport/flutter_libserialport.dart';
 import 'package:mks_eol/model/model.dart';
+import 'package:mks_eol/model/model.dart' as model;
 import 'package:mks_eol/services/logger.dart';
 import 'package:modbus_client/modbus_client.dart';
 import 'package:modbus_client_serial/modbus_client_serial.dart';
 import 'package:optional/optional.dart';
 import 'package:result_type/result_type.dart';
-import 'package:logging/logging.dart';
 
 const int _deviceClassAddress = 0;
 const int _remoteModeAddress = 402;
@@ -24,16 +24,18 @@ const int _actualVoltageAddress = 507;
 const String _jsonSteps = "steps";
 const String _jsonTarget = "target";
 const String _jsonTargetOperator = "operator";
-const String _jsonTargetOperatorDelayed = "operatorDelayed";
 const String _jsonTargetLoad = "load";
 const String _jsonDescription = "description";
+const String _jsonFinalDescription = "finalDescription";
+const String _jsonTitle = "title";
 const String _jsonElectronicLoad = "electronicLoad";
-const String _jsonImage = "image";
+const String _jsonImages = "images";
 const String _jsonDelay = "delay";
 const String _jsonCurrent = "current";
 const String _jsonVoltage = "voltage";
 const String _jsonStep = "step";
 const String _jsonPeriod = "period";
+const String _jsonZeroWhenFinished = "zeroWhenFinished";
 
 class ViewUpdater extends Cubit<Model> {
   ViewUpdater() : super(defaultModel);
@@ -51,8 +53,6 @@ class ViewUpdater extends Cubit<Model> {
   }
 
   Future<void> findPorts() async {
-    ModbusAppLogger(Level.FINE);
-
     final ports = SerialPort.availablePorts;
 
     ModbusClientSerialRtu? firstPort = null;
@@ -140,12 +140,19 @@ class ViewUpdater extends Cubit<Model> {
   }
 
   Future<void> moveToNextStep() async {
-    for (final load in ElectronicLoad.values) {
-      final port = this.state.getElectronicLoadPort(load)!;
-      await this.writeCoil(port, _remoteModeAddress, true);
-      await this._dcInput(load, false);
-      await this.writeHoldingRegister(port, _currentAddress, 0);
-      await this.writeHoldingRegister(port, _voltageAddress, 0);
+    final testStep = this.state.getTestStep();
+    if (testStep != null &&
+        testStep is LoadTestStep &&
+        testStep.zeroWhenFinished) {
+      for (final load in ElectronicLoad.values) {
+        final port = this.state.getElectronicLoadPort(load)!;
+        await this._dcInput(load, false);
+        await this.writeHoldingRegister(port, _currentAddress, 0);
+        await this.writeHoldingRegister(port, _voltageAddress, 0);
+        this.emit(this
+            .state
+            .setElectronicLoadValues(load, setCurrent: 0, setVoltage: 0));
+      }
     }
     this.emit(this.state.moveToNextStep());
   }
@@ -159,26 +166,37 @@ class ViewUpdater extends Cubit<Model> {
 
   Future<void> currentCurve(ElectronicLoad electronicLoad, double amperes,
       double amperesStep, double stepPeriod) async {
+    final state = this.state.getElectronicLoadState(electronicLoad);
+
     await this._curve(
         electronicLoad: electronicLoad,
         address: _currentAddress,
+        start: state.setCurrent,
         target: amperes,
         step: amperesStep,
         stepPeriod: stepPeriod,
         maxX: 0xD0E5,
         maxY: 40);
+    this.emit(this
+        .state
+        .setElectronicLoadValues(electronicLoad, setCurrent: amperes));
   }
 
   Future<void> voltageCurve(ElectronicLoad electronicLoad, double volts,
       double voltsStep, double stepPeriod) async {
+    final state = this.state.getElectronicLoadState(electronicLoad);
+
     await this._curve(
         electronicLoad: electronicLoad,
         address: _voltageAddress,
+        start: state.setVoltage,
         target: volts,
         step: voltsStep,
         stepPeriod: stepPeriod,
         maxX: 0xD0E5,
         maxY: 1000);
+    this.emit(
+        this.state.setElectronicLoadValues(electronicLoad, setVoltage: volts));
   }
 
   Future<void> stopCurrentTest() async {
@@ -260,6 +278,7 @@ class ViewUpdater extends Cubit<Model> {
     required ElectronicLoad electronicLoad,
     required int address,
     required double target,
+    required double start,
     required double step,
     required double stepPeriod,
     required double maxX,
@@ -274,7 +293,7 @@ class ViewUpdater extends Cubit<Model> {
     await this.writeHoldingRegister(port, _voltageAddress, 0);
     await this._dcInput(electronicLoad, true);
 
-    double actualValue = 0;
+    double actualValue = start;
 
     while (actualValue < target) {
       await Future.delayed(Duration(milliseconds: (stepPeriod * 1000).floor()));
@@ -291,7 +310,7 @@ class ViewUpdater extends Cubit<Model> {
 }
 
 TestStep? testStepFromJson(dynamic json) {
-  Curve? curveFromJson(Map<String, dynamic>? jsonMap) {
+  model.Curve? curveFromJson(Map<String, dynamic>? jsonMap) {
     try {
       final double target = cast<num?>(jsonMap![_jsonTarget])!.toDouble();
       final double step = cast<num>(jsonMap[_jsonStep])!.toDouble();
@@ -300,6 +319,19 @@ TestStep? testStepFromJson(dynamic json) {
     } catch (_) {
       return null;
     }
+  }
+
+  List<String> imagesFromJson(dynamic rawImages) {
+    List<String> images = [];
+    if (rawImages != null) {
+      if (rawImages is String) {
+        images = [rawImages];
+      } else if (rawImages is List<dynamic>) {
+        images = rawImages.map((i) => i as String).toList();
+      }
+    }
+
+    return images;
   }
 
   try {
@@ -312,39 +344,40 @@ TestStep? testStepFromJson(dynamic json) {
           {
             final ElectronicLoad electronicLoad = ElectronicLoad
                 .values[cast<int?>(jsonMap[_jsonElectronicLoad])!];
+            final String? title = cast<String>(jsonMap[_jsonTitle]);
             final String? description = cast<String>(jsonMap[_jsonDescription]);
-            final String? image = cast<String>(jsonMap[_jsonImage]);
+            final String? finalDescription =
+                cast<String>(jsonMap[_jsonFinalDescription]);
+            final bool? zeroWhenFinished =
+                cast<bool?>(jsonMap[_jsonZeroWhenFinished]);
 
-            final Curve? current = curveFromJson(jsonMap[_jsonCurrent]);
-            final Curve? voltage = curveFromJson(jsonMap[_jsonVoltage]);
+            final model.Curve? current = curveFromJson(jsonMap[_jsonCurrent]);
+            final model.Curve? voltage = curveFromJson(jsonMap[_jsonVoltage]);
 
             return LoadTestStep(
               electronicLoad: electronicLoad,
+              title: title ?? "",
               description: description ?? "",
-              imagePath: image,
+              finalDescription: finalDescription ?? "",
+              imagePaths: imagesFromJson(jsonMap[_jsonImages]),
               currentCurve: current,
               voltageCurve: voltage,
+              zeroWhenFinished: zeroWhenFinished ?? true,
             );
           }
         case _jsonTargetOperator:
           {
+            final int seconds = (cast<num?>(jsonMap[_jsonDelay]) ?? 0).toInt();
+            final String? title = cast<String>(jsonMap[_jsonTitle]);
             final String? description = cast<String>(jsonMap[_jsonDescription]);
-            final String? image = cast<String>(jsonMap[_jsonImage]);
+            final String? image = cast<String>(jsonMap[_jsonImages]);
             if (description != null || image != null) {
-              return DescriptiveTestStep(description ?? "", imagePath: image);
-            } else {
-              return null;
-            }
-          }
-        case _jsonTargetOperatorDelayed:
-          {
-            final String? description = cast<String>(jsonMap[_jsonDescription]);
-            final String? image = cast<String>(jsonMap[_jsonImage]);
-            final int seconds = cast<num>(jsonMap[_jsonDelay])!.toInt();
-            if (description != null || image != null) {
-              return DelayedTestStep(
-                  description ?? "", Duration(seconds: seconds),
-                  imagePath: image);
+              return DescriptiveTestStep(
+                title ?? "",
+                description ?? "",
+                imagePaths: imagesFromJson(jsonMap[_jsonImages]),
+                delay: Duration(seconds: seconds),
+              );
             } else {
               return null;
             }
