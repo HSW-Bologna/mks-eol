@@ -35,6 +35,8 @@ const String _jsonCurrent = "current";
 const String _jsonVoltage = "voltage";
 const String _jsonStep = "step";
 const String _jsonPeriod = "period";
+const String _jsonMin = "min";
+const String _jsonMax = "max";
 const String _jsonZeroWhenFinished = "zeroWhenFinished";
 
 class ViewUpdater extends Cubit<Model> {
@@ -43,11 +45,17 @@ class ViewUpdater extends Cubit<Model> {
   Future<void> loadTestConfiguration() async {
     final File file = File("test.json");
     try {
+      this.emit(this.state.copyWith(testSteps: const Optional.empty()));
+
       final jsonContent = jsonDecode(await file.readAsString());
       final List<dynamic> jsonSteps = jsonContent[_jsonSteps] as List<dynamic>;
-      this.emit(this.state.copyWith(
-          testSteps: jsonSteps.map(testStepFromJson).nonNulls.toList()));
+
+      this.emit(this
+          .state
+          .updateTestSteps(jsonSteps.map(testStepFromJson).nonNulls.toList()));
     } catch (e, s) {
+      this.emit(this.state.copyWith(
+          testSteps: Optional.of(Failure("Configurazione non valida!"))));
       logger.w("Invalid json!", error: e, stackTrace: s);
     }
   }
@@ -95,7 +103,11 @@ class ViewUpdater extends Cubit<Model> {
       }
     }
 
-    if (firstPort == null) {
+    if (ports.isEmpty) {
+      this.emit(this
+          .state
+          .copyWith(ports: Optional.of(Failure("Nessuna porta disponibile"))));
+    } else if (firstPort == null) {
       this.emit(this.state.copyWith(
           ports: Optional.of(Failure("Primo carico elettronico non trovato"))));
     } else if (secondPort == null) {
@@ -124,8 +136,17 @@ class ViewUpdater extends Cubit<Model> {
   void updateState() async {
     if (this.state.isConnected()) {
       for (final load in ElectronicLoad.values) {
-        final rawState = await this._readHoldingRegisters(
-            this.state.getElectronicLoadPort(load)!, _actualVoltageAddress, 3);
+        final port = this.state.getElectronicLoadPort(load)!;
+        final int deviceType =
+            await this._readHoldingRegister(port, _deviceClassAddress);
+        if (deviceType != 33 && deviceType != 59) {
+          this.emit(this.state.copyWith(
+              ports: Optional.of(Failure("Errore di comunicazione!"))));
+          break;
+        }
+
+        final rawState =
+            await this._readHoldingRegisters(port, _actualVoltageAddress, 3);
         if (rawState.length >= 3) {
           this.emit(this.state.updateElectronicLoadState(
                 load,
@@ -139,8 +160,26 @@ class ViewUpdater extends Cubit<Model> {
     this.emit(this.state.updateOperatorWaitTime());
   }
 
+  Future<void> abortTest() async {
+    for (final load in ElectronicLoad.values) {
+      final port = this.state.getElectronicLoadPort(load)!;
+      await this._dcInput(load, false);
+      await this.writeHoldingRegister(port, _currentAddress, 0);
+      await this.writeHoldingRegister(port, _voltageAddress, 0);
+      this.emit(this
+          .state
+          .setElectronicLoadValues(load, setCurrent: 0, setVoltage: 0));
+    }
+    this.emit(this.state.copyWith(testIndex: 0));
+  }
+
   Future<void> moveToNextStep() async {
+    if (!this.state.canProceed()) {
+      return;
+    }
+
     final testStep = this.state.getTestStep();
+
     if (testStep != null &&
         testStep is LoadTestStep &&
         testStep.zeroWhenFinished) {
@@ -176,7 +215,7 @@ class ViewUpdater extends Cubit<Model> {
         step: amperesStep,
         stepPeriod: stepPeriod,
         maxX: 0xD0E5,
-        maxY: 40);
+        maxY: 40.8);
     this.emit(this
         .state
         .setElectronicLoadValues(electronicLoad, setCurrent: amperes));
@@ -194,7 +233,7 @@ class ViewUpdater extends Cubit<Model> {
         step: voltsStep,
         stepPeriod: stepPeriod,
         maxX: 0xD0E5,
-        maxY: 1000);
+        maxY: 1020);
     this.emit(
         this.state.setElectronicLoadValues(electronicLoad, setVoltage: volts));
   }
@@ -315,7 +354,17 @@ TestStep? testStepFromJson(dynamic json) {
       final double target = cast<num?>(jsonMap![_jsonTarget])!.toDouble();
       final double step = cast<num>(jsonMap[_jsonStep])!.toDouble();
       final double period = cast<num>(jsonMap[_jsonPeriod])!.toDouble();
-      return (target: target, step: step, period: period);
+      final double min =
+          cast<num>(jsonMap[_jsonMin])?.toDouble() ?? double.negativeInfinity;
+      final double max =
+          cast<num>(jsonMap[_jsonMin])?.toDouble() ?? double.infinity;
+      return (
+        target: target,
+        step: step,
+        period: period,
+        minAcceptable: min,
+        maxAcceptable: max
+      );
     } catch (_) {
       return null;
     }
@@ -367,16 +416,20 @@ TestStep? testStepFromJson(dynamic json) {
           }
         case _jsonTargetOperator:
           {
-            final int seconds = (cast<num?>(jsonMap[_jsonDelay]) ?? 0).toInt();
+            final int? seconds = (cast<num?>(jsonMap[_jsonDelay]))?.toInt();
             final String? title = cast<String>(jsonMap[_jsonTitle]);
             final String? description = cast<String>(jsonMap[_jsonDescription]);
             final String? image = cast<String>(jsonMap[_jsonImages]);
+
+            final Duration? delay =
+                seconds != null ? Duration(seconds: seconds) : null;
+
             if (description != null || image != null) {
               return DescriptiveTestStep(
                 title ?? "",
                 description ?? "",
                 imagePaths: imagesFromJson(jsonMap[_jsonImages]),
-                delay: Duration(seconds: seconds),
+                delay: delay,
               );
             } else {
               return null;

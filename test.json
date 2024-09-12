@@ -8,7 +8,12 @@
         },
         {
             "target": "operator",
-            "description": "Verificare che sia selezionato il test \"HVAC Prova DC\"\nChiudere lo sportello, sganciare l'emergenza, premere il pulsante \"ripristina ausiliari\" ed eseguire il test premendo i due pulsanti verdi",
+            "description": "Verificare che sia selezionato il test \"HVAC Prova DC\"\nChiudere lo sportello, sganciare l'emergenza, premere il pulsante \"ripristina ausiliari\"",
+            "images": "assets/test-hvac.jpg"
+        },
+        {
+            "target": "operator",
+            "description": "Eseguire il test premendo i due pulsanti verdi e mantenerli premuti fino allo spegnimento della luce rossa",
             "images": "assets/test-hvac.jpg"
         },
         {
@@ -23,7 +28,16 @@
         {
             "target": "operator",
             "title": "Test a bassa tensione",
-            "description": "Verificare che il ponticello SPAD6 sia aperto\nPortare il variac a 0 V\nCollegare i cavi di alimentazione ai terminali J12, J13 e J14\nCollegare i cavi 1114/1115 ai terminali di uscita del PFC\nPosizionare il selettore su limite 4 A\nCollegare le sonde\nChiudere lo sportello",
+            "description": "Verificare che il ponticello SPAD6 sia aperto\nCollegare i cavi di alimentazione ai terminali J12, J13 e J14\nCollegare i cavi 1114/1115 ai terminali di uscita del PFC\nCollegare le sonde\nCollegare il connettore J1 (+24V)",
+            "images": [
+                "assets/cavi-1114-1115.jpg",
+                "assets/terminali-uscita-pfc.jpg"
+            ]
+        },
+        {
+            "target": "operator",
+            "title": "Test a bassa tensione",
+            "description": "Portare il variac a 0 V ed accenderlo\nPosizionare il selettore su limite 4 A\nConfigurare l'oscilloscopio a 20 V/Div, 5 ms/Div e trigger sulla rete.\nChiudere lo sportello, sganciare l'emergenza, premere il pulsante \"ripristina ausiliari\"",
             "images": [
                 "assets/cavi-1114-1115.jpg",
                 "assets/terminali-uscita-pfc.jpg"
@@ -36,7 +50,7 @@
         },
         {
             "target": "operator",
-            "description": "Portare la tensione del variac a 42 V e verificare che il LED PFC si accenda",
+            "description": "Accendere il Variac.\nPortare la tensione del variac a 42 V e verificare che il LED PFC si accenda",
             "images": "assets/led-pfc.jpg"
         },
         {
@@ -47,7 +61,7 @@
             "target": "load",
             "electronicLoad": 0,
             "title": "Test a bassa tensione",
-            "description": "Verifico carico a bassa tensione",
+            "description": "Verifica carico a bassa tensione",
             "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 180 Watt",
             "current": {
                 "target": 2.0,
@@ -57,19 +71,19 @@
         },
         {
             "target": "operator",
-            "description": "Spegnere il variac e premere il tasto di emergenza per aprire il portello"
+            "description": "Premere il tasto di emergenza ed aprire il portello"
         },
         {
             "target": "operator",
-            "description": "Saldare il ponticello SPAD\nConfigurare l'oscilloscopio a 200 V/Div, 5 ms/Div e trigger sulla rete"
+            "description": "Saldare il ponticello SPAD6\nConfigurare l'oscilloscopio a 200 V/Div, 5 ms/Div e trigger sulla rete"
         },
         {
             "target": "operator",
-            "description": "Chiudere la copertura e accendere gli ausiliari"
+            "description": "Chiudere lo sportello, sganciare l'emergenza, premere il pulsante \"ripristina ausiliari\""
         },
         {
             "target": "operator",
-            "description": "Accendere il variac e portarlo a 390 V"
+            "description": "Aumentare il Variac e portarlo a 390 V"
         },
         {
             "target": "operator",
@@ -80,7 +94,7 @@
             "electronicLoad": 0,
             "title": "Test ad alta tensione",
             "description": "",
-            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 1580 Watt",
+            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A).\nVerificare che la potenza impegnata sia minore di 1580 Watt.\nVerificare che il valore picco-picco sia minore di 20 V",
             "current": {
                 "target": 2.0,
                 "step": 0.5,
@@ -97,7 +111,7 @@
             "electronicLoad": 0,
             "title": "Test ad alta tensione",
             "description": "",
-            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 3900 Watt",
+            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 3900 Watt\nVerificare che il valore picco-picco sia minore di 20 V",
             "current": {
                 "target": 5.0,
                 "step": 0.5,
@@ -110,7 +124,7 @@
             "electronicLoad": 0,
             "title": "Test ad alta tensione",
             "description": "",
-            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 7700 Watt",
+            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 7700 Watt.\nVerificare che il valore picco-picco sia minore di 20 V",
             "current": {
                 "target": 10.0,
                 "step": 0.5,
@@ -123,7 +137,7 @@
             "electronicLoad": 0,
             "title": "Test ad alta tensione",
             "description": "",
-            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 7700 Watt",
+            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 11500 Watt.\nVerificare che il valore picco-picco sia minore di 20 V",
             "current": {
                 "target": 15.0,
                 "step": 0.5,
@@ -132,7 +146,7 @@
         },
         {
             "target": "operator",
-            "description": "Premere il tasto di emergenza; aspettare 30 secondi prima di aprire lo sportello",
+            "description": "Premere il tasto di emergenza; Aspettare 30 secondi prima di aprire lo sportello\n Spegnere il Variac e portarlo a 0V",
             "delay" : 30
         }
     ]
