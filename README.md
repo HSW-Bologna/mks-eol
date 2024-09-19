@@ -21,7 +21,7 @@ samples, guidance on mobile development, and a full API reference.
  - Recupero della comunicazione
  - ~Tasto "Interrompi"~
  - Tasto "salta"
- - Enter -> avanti, Esc -> Interrompi
+ - ~Enter -> avanti, Esc -> Interrompi~
  - Aggiungere la possibilita' di controllare uno dei valori; vai avanti se va bene
 
  - 3 valori che devono essere a x uno dall'altro, 1 che deve essere entro un certo range da y (i 4 valori + tensione e potenza (max 15000) vanno salvati)

@@ -25,6 +25,7 @@ const String _jsonSteps = "steps";
 const String _jsonTarget = "target";
 const String _jsonTargetOperator = "operator";
 const String _jsonTargetLoad = "load";
+const String _jsonTargetPwm = "pwm";
 const String _jsonDescription = "description";
 const String _jsonFinalDescription = "finalDescription";
 const String _jsonTitle = "title";
@@ -65,6 +66,7 @@ class ViewUpdater extends Cubit<Model> {
 
     ModbusClientSerialRtu? firstPort = null;
     ModbusClientSerialRtu? secondPort = null;
+    ModbusClientSerialRtu? thirdPort = null;
 
     this.emit(this.state.copyWith(ports: const Optional.empty()));
 
@@ -82,6 +84,7 @@ class ViewUpdater extends Cubit<Model> {
             baudRate: SerialBaudRate.b115200,
             flowControl: SerialFlowControl.none,
             unitId: address,
+            responseTimeout: const Duration(milliseconds: 2000),
           );
 
           final int deviceType =
@@ -102,6 +105,8 @@ class ViewUpdater extends Cubit<Model> {
         }
       }
     }
+
+    logger.i("Done ${firstPort} ${secondPort}");
 
     if (ports.isEmpty) {
       this.emit(this
@@ -201,6 +206,14 @@ class ViewUpdater extends Cubit<Model> {
     await this.writeCoil(this.state.getElectronicLoadPort(electronicLoad)!,
         _dcInputAddress, enable);
     this.emit(this.state.updateDcInput(electronicLoad, enable));
+  }
+
+  Future<void> startPwm(ElectronicLoad electronicLoad) async {
+    this.emit(this.state.copyWith(pwmState: PwmState.active));
+  }
+
+  Future<void> stopPwm(ElectronicLoad electronicLoad) async {
+    this.emit(this.state.copyWith(pwmState: PwmState.ready));
   }
 
   Future<void> currentCurve(ElectronicLoad electronicLoad, double amperes,
@@ -434,6 +447,21 @@ TestStep? testStepFromJson(dynamic json) {
             } else {
               return null;
             }
+          }
+        case _jsonTargetPwm:
+          {
+            final ElectronicLoad electronicLoad = ElectronicLoad
+                .values[cast<int?>(jsonMap[_jsonElectronicLoad])!];
+            final String? title = cast<String>(jsonMap[_jsonTitle]);
+            final String? description = cast<String>(jsonMap[_jsonDescription]);
+            final double voltage = cast<num>(jsonMap[_jsonVoltage])!.toDouble();
+
+            return PwmTestStep(
+              electronicLoad: electronicLoad,
+              title: title ?? "",
+              description: description ?? "",
+              voltage: voltage,
+            );
           }
         default:
           return null;

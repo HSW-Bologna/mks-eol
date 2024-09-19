@@ -7,30 +7,30 @@ import 'package:mks_eol/controller/view_updater.dart';
 import 'package:mks_eol/model/model.dart';
 import 'package:mks_eol/services/logger.dart';
 
-enum _CurrentTestStepState {
+enum _CurveTestStepState {
   ready,
   currentRamp,
   voltageRamp,
   done,
 }
 
-class _CurveTestStepCubit extends Cubit<_CurrentTestStepState> {
-  _CurveTestStepCubit() : super(_CurrentTestStepState.ready);
+class _CurveTestStepCubit extends Cubit<_CurveTestStepState> {
+  _CurveTestStepCubit() : super(_CurveTestStepState.ready);
 
   void startCurrentRamp() {
-    this.emit(_CurrentTestStepState.currentRamp);
+    this.emit(_CurveTestStepState.currentRamp);
   }
 
   void startVoltageRamp() {
-    this.emit(_CurrentTestStepState.voltageRamp);
+    this.emit(_CurveTestStepState.voltageRamp);
   }
 
   void rampDone() {
-    this.emit(_CurrentTestStepState.done);
+    this.emit(_CurveTestStepState.done);
   }
 
   void resetStep() {
-    this.emit(_CurrentTestStepState.ready);
+    this.emit(_CurveTestStepState.ready);
   }
 }
 
@@ -73,6 +73,7 @@ class _TestSequenceView extends StatelessWidget {
             child: SizedBox.expand(
               child: switch (model.getTestStep()) {
                 DescriptiveTestStep step => _DescriptiveTestStepView(step),
+                PwmTestStep step => _PwmTestStepView(step),
                 LoadTestStep step => _CurveTestStepView(step),
                 null => const Center(child: Text("Attendere...")),
               },
@@ -121,6 +122,43 @@ class _DescriptiveTestStepView extends StatelessWidget {
   }
 }
 
+class _PwmTestStepView extends StatelessWidget {
+  final PwmTestStep testStep;
+
+  const _PwmTestStepView(this.testStep);
+
+  @override
+  Widget build(BuildContext context) {
+    final model = context.watch<ViewUpdater>().state;
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+            child:
+                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          if (this.testStep.title.isNotEmpty)
+            Text(
+              this.testStep.title,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          Center(
+              child:
+                  Text(this.testStep.description, textAlign: TextAlign.center)),
+        ])),
+        const SizedBox(height: 32),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _cancelButton(context),
+            _proceedButton(() => context.read<ViewUpdater>().moveToNextStep()),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
 class _CurveTestStepView extends StatelessWidget {
   final LoadTestStep testStep;
 
@@ -152,20 +190,20 @@ class _CurveTestStepView extends StatelessWidget {
                 const SizedBox(height: 32),
                 Column(children: [
                   switch (state) {
-                    _CurrentTestStepState.ready => Text(
+                    _CurveTestStepState.ready => Text(
                         "Test di raggiungimento ${this.testStep.currentCurve?.target ?? 0.0} A / ${this.testStep.voltageCurve?.target ?? 0.0} V"),
-                    _CurrentTestStepState.voltageRamp =>
+                    _CurveTestStepState.voltageRamp =>
                       const Text("Incremento della tensione in corso..."),
-                    _CurrentTestStepState.currentRamp =>
+                    _CurveTestStepState.currentRamp =>
                       const Text("Incremento della corrente in corso..."),
-                    _CurrentTestStepState.done => model.canProceed()
+                    _CurveTestStepState.done => model.canProceed()
                         ? const SizedBox()
                         : const Text("Valori fuori dai limiti richiesti!"),
                   },
                   Text(
-                      "Tensione: ${model.getVoltage(electronicLoad)} V\nCorrente ${model.getAmperes(electronicLoad)} A\nPotenza ${model.getPower(electronicLoad)} Watt"),
+                      "Tensione: ${model.getVoltage(electronicLoad).toStringAsFixed(2)} V\nCorrente ${model.getAmperes(electronicLoad).toStringAsFixed(2)} A\nPotenza ${model.getPower(electronicLoad).toStringAsFixed(2)} Watt"),
                 ]),
-                state == _CurrentTestStepState.done
+                state == _CurveTestStepState.done
                     ? Text(this.testStep.finalDescription)
                     : Text(this.testStep.description),
               ]),
@@ -178,7 +216,7 @@ class _CurveTestStepView extends StatelessWidget {
       Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
         _cancelButton(context),
         switch (state) {
-          _CurrentTestStepState.ready => _proceedButton(() async {
+          _CurveTestStepState.ready => _proceedButton(() async {
               final stateCubit = context.read<_CurveTestStepCubit>();
               final viewUpdater = context.read<ViewUpdater>();
 
@@ -203,7 +241,7 @@ class _CurveTestStepView extends StatelessWidget {
 
               stateCubit.rampDone();
             }),
-          _CurrentTestStepState.done => _proceedButton(model.canProceed()
+          _CurveTestStepState.done => _proceedButton(model.canProceed()
               ? () async {
                   final viewUpdater = context.read<ViewUpdater>();
                   final stateCubit = context.read<_CurveTestStepCubit>();

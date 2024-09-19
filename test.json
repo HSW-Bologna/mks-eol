@@ -146,8 +146,12 @@
         },
         {
             "target": "operator",
-            "description": "Premere il tasto di emergenza; Aspettare 30 secondi prima di aprire lo sportello\n Spegnere il Variac e portarlo a 0V",
+            "description": "Premere il tasto di emergenza; Aspettare 30 secondi prima di aprire lo sportello\nSpegnere il Variac e portarlo a 0V",
             "delay" : 30
+        },
+        {
+            "target": "operator",
+            "description": "COLLAUDO COMPLETATO.\nRimuovere la scheda"
         }
     ]
 }
