@@ -17,7 +17,15 @@ samples, guidance on mobile development, and a full API reference.
 
 ## TODO
 
- - Add `delayedOperator` target that allows the operator to skip only after a certain time
- - The current target should only contain one current level; when started it tries to reach it with a certain step every certain period of time
+ - ~Aggiungere messaggio in caso di configurazione errata!~
+ - Recupero della comunicazione
+ - ~Tasto "Interrompi"~
+ - Tasto "salta"
+ - Enter -> avanti, Esc -> Interrompi
+ - Aggiungere la possibilita' di controllare uno dei valori; vai avanti se va bene
+
+ - 3 valori che devono essere a x uno dall'altro, 1 che deve essere entro un certo range da y (i 4 valori + tensione e potenza (max 15000) vanno salvati)
+ - Aggiungere la possibilita' di avanzare automaticamente da uno step "load"
+
  - The `ViewUpdater` should be a repository, not a `Bloc` or `Cubit`. 
     The updating part should be handled by each page's specific `Bloc`, just managing messages and reactivity.

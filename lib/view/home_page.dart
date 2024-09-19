@@ -76,81 +76,93 @@ class HomePage extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) => BlocProvider(
-        create: (_) => _PageCubit(),
-        child: Builder(builder: (context) {
-          final model = context.watch<ViewUpdater>().state;
+      create: (_) => _PageCubit(),
+      child: Builder(builder: (context) {
+        final model = context.watch<ViewUpdater>().state;
 
-          final registerOperation = (
-            TextEditingController controller,
-            String label,
-            void Function(String?, String?) onChange,
-            void Function() onRead,
-            void Function() onWrite,
-          ) =>
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Expanded(
-                      child: TextField(
-                    decoration: InputDecoration(labelText: "$label address"),
-                    keyboardType: TextInputType.number,
-                    onChanged: (value) => onChange(value, null),
-                    inputFormatters: <TextInputFormatter>[
-                      FilteringTextInputFormatter.digitsOnly
-                    ], // Only numbers can be entered
-                  )),
-                  Expanded(
-                      child: TextField(
-                    controller: controller,
-                    decoration: InputDecoration(labelText: "$label value"),
-                    keyboardType: TextInputType.number,
-                    onChanged: (value) => onChange(null, value),
-                    inputFormatters: <TextInputFormatter>[
-                      FilteringTextInputFormatter.digitsOnly
-                    ], // Only numbers can be entered
-                  )),
-                  ElevatedButton(onPressed: onRead, child: const Text("Read")),
-                  ElevatedButton(
-                      onPressed: onWrite, child: const Text("Write")),
-                ],
-              );
+        final registerOperation = (
+          TextEditingController controller,
+          String label,
+          void Function(String?, String?) onChange,
+          void Function() onRead,
+          void Function() onWrite,
+        ) =>
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Expanded(
+                    child: TextField(
+                  decoration: InputDecoration(labelText: "$label address"),
+                  keyboardType: TextInputType.number,
+                  onChanged: (value) => onChange(value, null),
+                  inputFormatters: <TextInputFormatter>[
+                    FilteringTextInputFormatter.digitsOnly
+                  ], // Only numbers can be entered
+                )),
+                Expanded(
+                    child: TextField(
+                  controller: controller,
+                  decoration: InputDecoration(labelText: "$label value"),
+                  keyboardType: TextInputType.number,
+                  onChanged: (value) => onChange(null, value),
+                  inputFormatters: <TextInputFormatter>[
+                    FilteringTextInputFormatter.digitsOnly
+                  ], // Only numbers can be entered
+                )),
+                ElevatedButton(onPressed: onRead, child: const Text("Read")),
+                ElevatedButton(onPressed: onWrite, child: const Text("Write")),
+              ],
+            );
 
-          final pageCubit = context.read<_PageCubit>();
+        final pageCubit = context.read<_PageCubit>();
 
-          return Scaffold(
-            body: Center(
-              child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    if (model.ports.isPresent) ...[
-                      Text(
-                          "Ricerca dei dispositivi fallita: ${model.ports.value.failure}"),
-                      const SizedBox(height: 16),
-                      ElevatedButton(
-                          onPressed: () =>
-                              context.read<ViewUpdater>().findPorts(),
-                          child: const Text("Riprova")),
-                    ],
-                    if (model.ports.isEmpty) ...[
-                      const Text("Caricamento"),
-                    ],
-                    /*DropdownMenu<String>(
-                      initialSelection: model.connectedPort.orElseNull,
-                      onSelected: (String? value) {
-                        if (value != null) {
-                          context.read<ViewUpdater>().connectToPort(value);
-                        }
-                      },
-                      dropdownMenuEntries: model.serialPorts
-                          .map<DropdownMenuEntry<String>>((String value) {
-                        return DropdownMenuEntry<String>(
-                            value: value, label: value);
-                      }).toList(),
-                    ),*/
-                  ]),
-            ),
-          );
-        }),
-      );
+        return Scaffold(
+            body: SizedBox.expand(
+                child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: _statusMessage(),
+        )));
+      }));
 }
+
+Widget _statusMessage() =>
+    BlocBuilder<ViewUpdater, Model>(builder: (context, model) {
+      if (model.isWaitingForConfiguration()) {
+        return const Text("Attendere...");
+      } else if (model.isThereAConfigurationError()) {
+        return Expanded(
+            child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+              const Text("Configurazione errata!"),
+              const SizedBox(height: 32),
+              ElevatedButton(
+                  onPressed: () {
+                    context.read<ViewUpdater>().loadTestConfiguration();
+                  },
+                  child: const Padding(
+                      padding: EdgeInsets.all(8), child: Text("Riprova")))
+            ]));
+      } else if (model.isThereAConnectionError()) {
+        return Expanded(
+            child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+              Text(
+                  "Ricerca dei dispositivi fallita: ${model.ports.value.failure}"),
+              const SizedBox(height: 32),
+              ElevatedButton(
+                  onPressed: () {
+                    context.read<ViewUpdater>().findPorts();
+                  },
+                  child: const Padding(
+                      padding: EdgeInsets.all(8), child: Text("Riprova")))
+            ]));
+      } else if (model.ports.isEmpty) {
+        return const Text("Connessione in corso...");
+      } else {
+        return const Text("Attendere...");
+      }
+    });

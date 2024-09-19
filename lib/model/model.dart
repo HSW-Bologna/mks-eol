@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:modbus_client_serial/modbus_client_serial.dart';
 import 'package:optional/optional.dart';
+import 'package:result_type/result_type.dart';
 import 'package:result_type/src/result.dart';
 
 enum ElectronicLoad {
@@ -15,13 +16,13 @@ class DescriptiveTestStep extends TestStep {
   final String title;
   final String description;
   final List<String> imagePaths;
-  final Duration delay;
+  final Duration? delay;
 
   DescriptiveTestStep(
     this.title,
     this.description, {
     this.imagePaths = const <String>[],
-    this.delay = const Duration(seconds: 0),
+    this.delay = null,
   });
 }
 
@@ -29,6 +30,8 @@ typedef Curve = ({
   double target,
   double step,
   double period,
+  double minAcceptable,
+  double maxAcceptable,
 });
 
 @immutable
@@ -92,7 +95,7 @@ typedef Model = ({
   ElectronicLoadState currentElectronicLoadState,
   ElectronicLoadState voltageElectronicLoadState,
   int testIndex,
-  List<TestStep> testSteps,
+  Optional<Result<List<TestStep>, String>> testSteps,
   DateTime timestamp,
   Duration remainingDuration,
 });
@@ -116,7 +119,7 @@ final Model defaultModel = (
     dcInput: false
   ),
   testIndex: 0,
-  testSteps: [],
+  testSteps: const Optional.empty(),
   timestamp: DateTime.now(),
   remainingDuration: Duration.zero,
 );
@@ -127,7 +130,7 @@ extension Impl on Model {
     ElectronicLoadState? currentElectronicLoadState,
     ElectronicLoadState? voltageElectronicLoadState,
     int? testIndex,
-    List<TestStep>? testSteps,
+    Optional<Result<List<TestStep>, String>>? testSteps,
     DateTime? timestamp,
     Duration? remainingDuration,
   }) =>
@@ -144,15 +147,20 @@ extension Impl on Model {
       );
 
   Model moveToNextStep() {
-    final newModel =
-        this.copyWith(testIndex: (this.testIndex + 1) % this.testSteps.length);
-    final newStep = newModel.getTestStep();
-    if (newStep != null &&
-        newStep is DescriptiveTestStep &&
-        newStep.delay.inSeconds > 0) {
-      return newModel.copyWith(timestamp: DateTime.now());
+    if (this.isConfigured()) {
+      final newModel = this.copyWith(
+          testIndex:
+              (this.testIndex + 1) % this.testSteps.value.success.length);
+      final newStep = newModel.getTestStep();
+      if (newStep != null &&
+          newStep is DescriptiveTestStep &&
+          newStep.delay != null) {
+        return newModel.copyWith(timestamp: DateTime.now());
+      } else {
+        return newModel;
+      }
     } else {
-      return newModel;
+      return this;
     }
   }
 
@@ -177,11 +185,20 @@ extension Impl on Model {
   }
 
   Model updateTestSteps(List<TestStep> steps) =>
-      this.copyWith(testIndex: 0, testSteps: steps);
+      this.copyWith(testIndex: 0, testSteps: Optional.of(Success(steps)));
 
   bool isConnected() => this.ports.isPresent && this.ports.value.isSuccess;
 
-  TestStep? getTestStep() => this.testSteps.elementAtOrNull(this.testIndex);
+  bool isThereAConnectionError() =>
+      this.ports.isPresent && this.ports.value.isFailure;
+
+  TestStep? getTestStep() {
+    if (this.testSteps.isPresent && this.testSteps.value.isSuccess) {
+      return this.testSteps.value.success.elementAtOrNull(this.testIndex);
+    } else {
+      return null;
+    }
+  }
 
   double getAmperes(ElectronicLoad electronicLoad) =>
       (this.getElectronicLoadState(electronicLoad).current * 50.0) / 0xFFFF;
@@ -189,18 +206,19 @@ extension Impl on Model {
   double getVoltage(ElectronicLoad electronicLoad) =>
       (this.getElectronicLoadState(electronicLoad).voltage * 1250.0) / 0xFFFF;
 
+  double getPower(ElectronicLoad electronicLoad) =>
+      (this.getElectronicLoadState(electronicLoad).power * 18750.0) / 0xFFFF;
+
   int getOperatorWaitTime() {
     return this.remainingDuration.inSeconds;
   }
 
   Model updateOperatorWaitTime() {
     final step = this.getTestStep();
-    if (step != null &&
-        step is DescriptiveTestStep &&
-        step.delay.inSeconds > 0) {
+    if (step != null && step is DescriptiveTestStep && step.delay != null) {
       return this.copyWith(
           remainingDuration:
-              step.delay - DateTime.now().difference(this.timestamp));
+              step.delay! - DateTime.now().difference(this.timestamp));
     } else {
       return this;
     }
@@ -230,6 +248,42 @@ extension Impl on Model {
         return this.copyWith(currentElectronicLoadState: state);
       case ElectronicLoad.voltage:
         return this.copyWith(voltageElectronicLoadState: state);
+    }
+  }
+
+  bool isConfigured() =>
+      this.testSteps.isPresent && this.testSteps.value.isSuccess;
+
+  bool isWaitingForConfiguration() => this.testSteps.isEmpty;
+
+  bool isThereAConfigurationError() =>
+      this.testSteps.isPresent && this.testSteps.value.isFailure;
+
+  bool canProceed() {
+    final testStep = this.getTestStep();
+    if (testStep != null) {
+      if (testStep is LoadTestStep) {
+        final load = testStep.electronicLoad;
+        final amperes = this.getAmperes(load);
+        final volts = this.getVoltage(load);
+
+        return (amperes >=
+                (testStep.currentCurve?.minAcceptable ??
+                    double.negativeInfinity)) &&
+            (amperes <=
+                (testStep.currentCurve?.maxAcceptable ?? double.infinity)) &&
+            (volts >=
+                (testStep.voltageCurve?.minAcceptable ??
+                    double.negativeInfinity)) &&
+            (volts <=
+                (testStep.voltageCurve?.maxAcceptable ?? double.infinity));
+      } else if (testStep is DescriptiveTestStep) {
+        return this.getOperatorWaitTime() <= 0;
+      } else {
+        return true;
+      }
+    } else {
+      return false;
     }
   }
 }
