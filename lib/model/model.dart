@@ -9,6 +9,11 @@ enum ElectronicLoad {
   voltage,
 }
 
+enum PwmState {
+  ready,
+  active,
+}
+
 sealed class TestStep {}
 
 @immutable
@@ -57,6 +62,21 @@ class LoadTestStep extends TestStep {
   });
 }
 
+@immutable
+class PwmTestStep extends TestStep {
+  final String title;
+  final String description;
+  final ElectronicLoad electronicLoad;
+  final double voltage;
+
+  PwmTestStep({
+    required this.title,
+    required this.description,
+    required this.electronicLoad,
+    required this.voltage,
+  });
+}
+
 typedef ElectronicLoadState = ({
   int voltage,
   int current,
@@ -87,7 +107,8 @@ extension MachineStateImpl on ElectronicLoadState {
 
 typedef ModbusPorts = ({
   ModbusClientSerialRtu firstElectronicLoad,
-  ModbusClientSerialRtu secondElectronicLoad
+  ModbusClientSerialRtu secondElectronicLoad,
+  //ModbusClientSerialRtu pwmControl
 });
 
 typedef Model = ({
@@ -96,6 +117,7 @@ typedef Model = ({
   ElectronicLoadState voltageElectronicLoadState,
   int testIndex,
   Optional<Result<List<TestStep>, String>> testSteps,
+  PwmState pwmState,
   DateTime timestamp,
   Duration remainingDuration,
 });
@@ -120,6 +142,7 @@ final Model defaultModel = (
   ),
   testIndex: 0,
   testSteps: const Optional.empty(),
+  pwmState: PwmState.ready,
   timestamp: DateTime.now(),
   remainingDuration: Duration.zero,
 );
@@ -131,6 +154,7 @@ extension Impl on Model {
     ElectronicLoadState? voltageElectronicLoadState,
     int? testIndex,
     Optional<Result<List<TestStep>, String>>? testSteps,
+    PwmState? pwmState,
     DateTime? timestamp,
     Duration? remainingDuration,
   }) =>
@@ -142,6 +166,7 @@ extension Impl on Model {
             voltageElectronicLoadState ?? this.voltageElectronicLoadState,
         testIndex: testIndex ?? this.testIndex,
         testSteps: testSteps ?? this.testSteps,
+        pwmState: pwmState ?? this.pwmState,
         timestamp: timestamp ?? this.timestamp,
         remainingDuration: remainingDuration ?? this.remainingDuration,
       );
