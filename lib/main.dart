@@ -4,7 +4,7 @@ import 'package:logging/logging.dart';
 import 'package:modbus_client/modbus_client.dart';
 
 void main() {
-  ModbusAppLogger(Level.FINE);
+  //ModbusAppLogger(Level.FINE);
 
   runApp(const App());
 }

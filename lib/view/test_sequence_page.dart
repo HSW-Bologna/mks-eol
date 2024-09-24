@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mks_eol/controller/view_updater.dart';
 import 'package:mks_eol/model/model.dart';
@@ -53,7 +54,8 @@ class _TestSequenceView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final model = context.watch<ViewUpdater>().state;
+    final testStep = context.select<ViewUpdater, TestStep?>(
+        (updater) => updater.state.getTestStep());
 
     return KeyboardListener(
         focusNode: this.focusNode,
@@ -62,7 +64,9 @@ class _TestSequenceView extends StatelessWidget {
           logger.i(event.toString());
           if (event is KeyDownEvent) {
             if (event.logicalKey == LogicalKeyboardKey.enter) {
-              context.read<ViewUpdater>().moveToNextStep();
+              if (testStep is! FinalTestStep) {
+                context.read<ViewUpdater>().moveToNextStep();
+              }
             } else if (event.logicalKey == LogicalKeyboardKey.escape) {
               await _abort(context);
             }
@@ -71,13 +75,185 @@ class _TestSequenceView extends StatelessWidget {
         child: Padding(
             padding: const EdgeInsets.all(16),
             child: SizedBox.expand(
-              child: switch (model.getTestStep()) {
+              child: switch (testStep) {
                 DescriptiveTestStep step => _DescriptiveTestStepView(step),
+                CheckTestStep step => _CheckTestStepView(step),
                 PwmTestStep step => _PwmTestStepView(step),
                 LoadTestStep step => _CurveTestStepView(step),
+                FinalTestStep _ => const _FinalTestStepWidget(),
                 null => const Center(child: Text("Attendere...")),
               },
             )));
+  }
+}
+
+class _DeviceIdCubit extends Cubit<String> {
+  _DeviceIdCubit() : super("");
+
+  void update(String value) => this.emit(value);
+}
+
+class _FinalTestStepWidget extends StatelessWidget {
+  const _FinalTestStepWidget();
+
+  @override
+  Widget build(BuildContext context) {
+    final FocusNode unitCodeCtrlFocusNode = FocusNode();
+    FocusScope.of(context).requestFocus(unitCodeCtrlFocusNode);
+
+    return BlocProvider(
+        create: (_) => _DeviceIdCubit(),
+        child: Builder(
+            builder: (context) => Column(
+                  mainAxisAlignment: MainAxisAlignment.start,
+                  children: [
+                    Expanded(
+                        child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                          const Text(
+                            "Scannerizzare il numero di serie",
+                            style: TextStyle(fontWeight: FontWeight.w400),
+                          ),
+                          SizedBox(
+                              width: 400.0,
+                              child: TextField(
+                                focusNode: unitCodeCtrlFocusNode,
+                                textInputAction: TextInputAction.go,
+                                onChanged: (value) {
+                                  context.read<_DeviceIdCubit>().update(value);
+                                },
+                                onSubmitted: (value) async {
+                                  logger.i("Enter pressed");
+                                  await this.saveReport(context);
+                                },
+                              )),
+                        ])),
+                    ElevatedButton(
+                        onPressed: () async {
+                          logger.i("BUtton pressed");
+                          await this.saveReport(context);
+                        },
+                        child: const Text("Conferma"))
+                  ],
+                )));
+  }
+
+  Future<void> saveReport(BuildContext context) async {
+    final viewUpdater = context.read<ViewUpdater>();
+
+    final result =
+        await viewUpdater.saveTestData(context.read<_DeviceIdCubit>().state);
+    logger.i("$result");
+
+    if (!result && context.mounted) {
+      await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+                title: const Text("Attenzione"),
+                content: const Text("Salvataggio del rapporto fallito!"),
+                actions: [
+                  ElevatedButton(
+                      onPressed: () {
+                        Navigator.pop(context, false);
+                      },
+                      child: const Text("Ok")),
+                ],
+              ));
+    } else {
+      logger.i("Moving to next step");
+      viewUpdater.moveToNextStep();
+    }
+  }
+}
+
+class _CheckTestStepView extends StatelessWidget {
+  final CheckTestStep testStep;
+
+  const _CheckTestStepView(this.testStep);
+
+  @override
+  Widget build(BuildContext context) {
+    final model = context.watch<ViewUpdater>().state;
+
+    return Column(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Expanded(
+            child:
+                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
+          if (this.testStep.title.isNotEmpty)
+            Text(
+              this.testStep.title,
+              style: const TextStyle(fontWeight: FontWeight.w800),
+            ),
+          Center(
+              child:
+                  Text(this.testStep.description, textAlign: TextAlign.center)),
+        ])),
+        Expanded(
+            child: Column(children: [
+          Text(
+              "I seguenti valori devono essere entro ${this.testStep.maxVariance} l'uno dall'altro"),
+          Wrap(
+              spacing: 32,
+              runSpacing: 32,
+              children: List.generate(
+                  3,
+                  (index) => SizedBox(
+                      width: 200,
+                      child: TextField(
+                        keyboardType: const TextInputType.numberWithOptions(
+                            decimal: true),
+                        inputFormatters: <TextInputFormatter>[
+                          FilteringTextInputFormatter.allow(
+                              RegExp(r'(^-?\d*\.?\d*)'))
+                        ],
+                        onChanged: (value) {
+                          final viewUpdater = context.read<ViewUpdater>();
+                          final doubleValue = double.tryParse(value);
+
+                          if (doubleValue != null) {
+                            viewUpdater.updateVarianceValue(index, doubleValue);
+                          }
+                        },
+                      )))),
+        ])),
+        Expanded(
+          child: Column(children: [
+            Text(
+                "Il seguente valore deve essere entro ${this.testStep.maxDifference} da ${this.testStep.targetValue}"),
+            SizedBox(
+                width: 200,
+                child: TextField(
+                  keyboardType:
+                      const TextInputType.numberWithOptions(decimal: true),
+                  inputFormatters: <TextInputFormatter>[
+                    FilteringTextInputFormatter.allow(RegExp(r'(^-?\d*\.?\d*)'))
+                  ],
+                  onChanged: (value) {
+                    final viewUpdater = context.read<ViewUpdater>();
+                    final doubleValue = double.tryParse(value);
+
+                    if (doubleValue != null) {
+                      viewUpdater.updateDifferenceValue(doubleValue);
+                    }
+                  },
+                )),
+          ]),
+        ),
+        const SizedBox(height: 32),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceAround,
+          children: [
+            _cancelButton(context),
+            _proceedButton(model.canProceed()
+                ? () => context.read<ViewUpdater>().moveToNextStep()
+                : null),
+          ],
+        )
+      ],
+    );
   }
 }
 
@@ -143,15 +319,26 @@ class _PwmTestStepView extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
           Center(
-              child:
-                  Text(this.testStep.description, textAlign: TextAlign.center)),
+              child: Text(
+                  model.pwmState == PwmState.ready
+                      ? ""
+                      : this.testStep.description,
+                  textAlign: TextAlign.center)),
         ])),
         const SizedBox(height: 32),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _cancelButton(context),
-            _proceedButton(() => context.read<ViewUpdater>().moveToNextStep()),
+            _proceedButton(() {
+              final viewUpdater = context.read<ViewUpdater>();
+              if (viewUpdater.state.pwmState == PwmState.ready) {
+                viewUpdater.startPwm(this.testStep.electronicLoad,
+                    this.testStep.voltage, this.testStep.current);
+              } else {
+                viewUpdater.moveToNextStep();
+              }
+            }),
           ],
         ),
       ],

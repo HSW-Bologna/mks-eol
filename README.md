@@ -1,7 +1,5 @@
 # mks_eol
 
-A new Flutter project.
-
 ## Getting Started
 
 This project is a starting point for a Flutter application.
@@ -18,14 +16,15 @@ samples, guidance on mobile development, and a full API reference.
 ## TODO
 
  - ~Aggiungere messaggio in caso di configurazione errata!~
- - Recupero della comunicazione
+ - ~Recupero della comunicazione~
  - ~Tasto "Interrompi"~
- - Tasto "salta"
  - ~Enter -> avanti, Esc -> Interrompi~
- - Aggiungere la possibilita' di controllare uno dei valori; vai avanti se va bene
 
+ - Aggiungere la possibilita' di controllare uno dei valori; vai avanti se va bene
  - 3 valori che devono essere a x uno dall'altro, 1 che deve essere entro un certo range da y (i 4 valori + tensione e potenza (max 15000) vanno salvati)
+
  - Aggiungere la possibilita' di avanzare automaticamente da uno step "load"
+ - Tasto "salta"
 
  - The `ViewUpdater` should be a repository, not a `Bloc` or `Cubit`. 
     The updating part should be handled by each page's specific `Bloc`, just managing messages and reactivity.

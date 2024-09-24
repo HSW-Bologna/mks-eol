@@ -154,8 +154,8 @@ Widget _statusMessage() =>
                   "Ricerca dei dispositivi fallita: ${model.ports.value.failure}"),
               const SizedBox(height: 32),
               ElevatedButton(
-                  onPressed: () async {
-                    await context.read<ViewUpdater>().findPorts();
+                  onPressed: () {
+                    context.read<ViewUpdater>().findPorts();
                   },
                   child: const Padding(
                       padding: EdgeInsets.all(8), child: Text("Riprova")))

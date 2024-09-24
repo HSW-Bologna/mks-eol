@@ -17,6 +17,30 @@ enum PwmState {
 sealed class TestStep {}
 
 @immutable
+class FinalTestStep extends TestStep {
+  FinalTestStep();
+}
+
+@immutable
+class CheckTestStep extends TestStep {
+  final String title;
+  final String description;
+  final double maxVariance;
+  final double targetValue;
+  final double current;
+  final double maxDifference;
+
+  CheckTestStep({
+    required this.title,
+    required this.description,
+    required this.maxVariance,
+    required this.targetValue,
+    required this.maxDifference,
+    required this.current,
+  });
+}
+
+@immutable
 class DescriptiveTestStep extends TestStep {
   final String title;
   final String description;
@@ -68,12 +92,14 @@ class PwmTestStep extends TestStep {
   final String description;
   final ElectronicLoad electronicLoad;
   final double voltage;
+  final double current;
 
   PwmTestStep({
     required this.title,
     required this.description,
     required this.electronicLoad,
     required this.voltage,
+    required this.current,
   });
 }
 
@@ -108,10 +134,11 @@ extension MachineStateImpl on ElectronicLoadState {
 typedef ModbusPorts = ({
   ModbusClientSerialRtu firstElectronicLoad,
   ModbusClientSerialRtu secondElectronicLoad,
-  //ModbusClientSerialRtu pwmControl
+  ModbusClientSerialRtu pwmControl
 });
 
 typedef Model = ({
+  String reportsPath,
   Optional<Result<ModbusPorts, String>> ports,
   ElectronicLoadState currentElectronicLoadState,
   ElectronicLoadState voltageElectronicLoadState,
@@ -120,9 +147,13 @@ typedef Model = ({
   PwmState pwmState,
   DateTime timestamp,
   Duration remainingDuration,
+  List<double> varianceValues,
+  double differenceValue,
+  List<List<double>> testData,
 });
 
 final Model defaultModel = (
+  reportsPath: "",
   ports: const Optional.empty(),
   currentElectronicLoadState: (
     voltage: 0,
@@ -145,10 +176,14 @@ final Model defaultModel = (
   pwmState: PwmState.ready,
   timestamp: DateTime.now(),
   remainingDuration: Duration.zero,
+  varianceValues: [],
+  differenceValue: 0,
+  testData: [],
 );
 
 extension Impl on Model {
   Model copyWith({
+    String? reportsPath,
     Optional<Result<ModbusPorts, String>>? ports,
     ElectronicLoadState? currentElectronicLoadState,
     ElectronicLoadState? voltageElectronicLoadState,
@@ -157,8 +192,12 @@ extension Impl on Model {
     PwmState? pwmState,
     DateTime? timestamp,
     Duration? remainingDuration,
+    List<double>? varianceValues,
+    double? differenceValue,
+    List<List<double>>? testData,
   }) =>
       (
+        reportsPath: reportsPath ?? this.reportsPath,
         ports: ports ?? this.ports,
         currentElectronicLoadState:
             currentElectronicLoadState ?? this.currentElectronicLoadState,
@@ -169,13 +208,49 @@ extension Impl on Model {
         pwmState: pwmState ?? this.pwmState,
         timestamp: timestamp ?? this.timestamp,
         remainingDuration: remainingDuration ?? this.remainingDuration,
+        varianceValues: varianceValues ?? this.varianceValues,
+        differenceValue: differenceValue ?? this.differenceValue,
+        testData: testData ?? this.testData,
       );
+
+  Model updateVarianceValue(int index, double value) {
+    List<double> newValues = List.from(this.varianceValues);
+    if (index >= newValues.length) {
+      newValues.addAll(List.filled(index - newValues.length + 1, 0));
+    }
+    newValues[index] = value;
+    return this.copyWith(varianceValues: newValues);
+  }
 
   Model moveToNextStep() {
     if (this.isConfigured()) {
-      final newModel = this.copyWith(
+      List<List<double>> testData = List.from(this.testData);
+
+      final currentStep = this.getTestStep();
+      if (currentStep != null &&
+          currentStep is CheckTestStep &&
+          this.canProceed()) {
+        testData.add([
+          this.getVarianceValue(0),
+          this.getVarianceValue(1),
+          this.getVarianceValue(2),
+          this.differenceValue,
+          this.getPower(ElectronicLoad.current),
+          this.getVoltage(ElectronicLoad.current),
+          this.getPower(ElectronicLoad.voltage),
+          this.getVoltage(ElectronicLoad.voltage),
+        ]);
+      }
+
+      var newModel = this.copyWith(
+          testData: testData,
           testIndex:
               (this.testIndex + 1) % this.testSteps.value.success.length);
+
+      if (newModel.testIndex == 0) {
+        newModel = newModel.copyWith(testData: []);
+      }
+
       final newStep = newModel.getTestStep();
       if (newStep != null &&
           newStep is DescriptiveTestStep &&
@@ -209,8 +284,8 @@ extension Impl on Model {
         electronicLoad, state.copyWith(dcInput: enable));
   }
 
-  Model updateTestSteps(List<TestStep> steps) =>
-      this.copyWith(testIndex: 0, testSteps: Optional.of(Success(steps)));
+  Model updateTestSteps(List<TestStep> steps) => this.copyWith(
+      testIndex: 0, testSteps: Optional.of(Success(steps + [FinalTestStep()])));
 
   bool isConnected() => this.ports.isPresent && this.ports.value.isSuccess;
 
@@ -260,6 +335,14 @@ extension Impl on Model {
     }
   }
 
+  ModbusClientSerialRtu? getPwmControlPort() {
+    if (this.ports.isPresent && this.ports.value.isSuccess) {
+      return this.ports.value.success.pwmControl;
+    } else {
+      return null;
+    }
+  }
+
   ElectronicLoadState getElectronicLoadState(ElectronicLoad electronicLoad) =>
       switch (electronicLoad) {
         ElectronicLoad.current => this.currentElectronicLoadState,
@@ -304,6 +387,15 @@ extension Impl on Model {
                 (testStep.voltageCurve?.maxAcceptable ?? double.infinity));
       } else if (testStep is DescriptiveTestStep) {
         return this.getOperatorWaitTime() <= 0;
+      } else if (testStep is CheckTestStep) {
+        bool isWithinRange(double value, double target, double difference) =>
+            value >= target - difference && value <= target + difference;
+        return isWithinRange(this.getVarianceValue(0), this.getVarianceValue(1),
+                testStep.maxVariance) &&
+            isWithinRange(this.getVarianceValue(1), this.getVarianceValue(2),
+                testStep.maxVariance) &&
+            isWithinRange(this.differenceValue, testStep.targetValue,
+                testStep.maxDifference);
       } else {
         return true;
       }
@@ -311,4 +403,7 @@ extension Impl on Model {
       return false;
     }
   }
+
+  double getVarianceValue(int index) =>
+      this.varianceValues.elementAtOrNull(index) ?? 0;
 }
