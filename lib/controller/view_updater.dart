@@ -13,6 +13,7 @@ import 'package:modbus_client/modbus_client.dart';
 import 'package:modbus_client_serial/modbus_client_serial.dart';
 import 'package:optional/optional.dart';
 import 'package:result_type/result_type.dart';
+import 'package:path/path.dart' as path;
 
 const int _deviceClassAddress = 0;
 const int _remoteModeAddress = 402;
@@ -21,11 +22,16 @@ const int _voltageAddress = 500;
 const int _currentAddress = 501;
 const int _actualVoltageAddress = 507;
 
+const String _jsonReportsPath = "reportsPath";
 const String _jsonSteps = "steps";
 const String _jsonTarget = "target";
 const String _jsonTargetOperator = "operator";
 const String _jsonTargetLoad = "load";
 const String _jsonTargetPwm = "pwm";
+const String _jsonTargetCheck = "check";
+const String _jsonTargetValue = "targetValue";
+const String _jsonMaxVariance = "maxVariance";
+const String _jsonMaxDifference = "maxDifference";
 const String _jsonDescription = "description";
 const String _jsonFinalDescription = "finalDescription";
 const String _jsonTitle = "title";
@@ -50,10 +56,12 @@ class ViewUpdater extends Cubit<Model> {
 
       final jsonContent = jsonDecode(await file.readAsString());
       final List<dynamic> jsonSteps = jsonContent[_jsonSteps] as List<dynamic>;
+      final reportsPath = cast<String?>(jsonContent[_jsonReportsPath]) ?? "";
 
       this.emit(this
           .state
-          .updateTestSteps(jsonSteps.map(testStepFromJson).nonNulls.toList()));
+          .updateTestSteps(jsonSteps.map(testStepFromJson).nonNulls.toList())
+          .copyWith(reportsPath: reportsPath));
     } catch (e, s) {
       this.emit(this.state.copyWith(
           testSteps: Optional.of(Failure("Configurazione non valida!"))));
@@ -90,6 +98,7 @@ class ViewUpdater extends Cubit<Model> {
           final int deviceType =
               await this._readHoldingRegister(client, _deviceClassAddress);
           logger.i("Device type found ${deviceType}");
+
           switch (deviceType) {
             case 59:
               firstPort = client;
@@ -97,8 +106,13 @@ class ViewUpdater extends Cubit<Model> {
             case 33:
               secondPort = client;
               break;
-            case 0xbeef:
+            case 0xBEAF:
+              thirdPort = client;
               break;
+          }
+
+          if (deviceType != 0) {
+            break;
           }
         } catch (e, s) {
           logger.i("Unable to open port ${port}", error: e, stackTrace: s);
@@ -119,14 +133,19 @@ class ViewUpdater extends Cubit<Model> {
       this.emit(this.state.copyWith(
           ports:
               Optional.of(Failure("Secondo carico elettronico non trovato"))));
+    } else if (thirdPort == null) {
+      this.emit(this
+          .state
+          .copyWith(ports: Optional.of(Failure("Controllo PWM non trovato"))));
     } else {
       this.emit(this.state.copyWith(
               ports: Optional.of(Success((
             firstElectronicLoad: firstPort,
-            secondElectronicLoad: secondPort
+            secondElectronicLoad: secondPort,
+            pwmControl: thirdPort,
           )))));
       logger.i(
-          "Successfully connected to ${firstPort.serialPort.name} / ${secondPort.serialPort.name}");
+          "Successfully connected to ${firstPort.serialPort.name} / ${secondPort.serialPort.name} / ${thirdPort.serialPort.name}");
 
       for (final load in ElectronicLoad.values) {
         final port = this.state.getElectronicLoadPort(load)!;
@@ -135,6 +154,8 @@ class ViewUpdater extends Cubit<Model> {
         await this.writeHoldingRegister(port, _currentAddress, 0);
         await this.writeHoldingRegister(port, _voltageAddress, 0);
       }
+
+      await this.init();
     }
   }
 
@@ -165,6 +186,35 @@ class ViewUpdater extends Cubit<Model> {
     this.emit(this.state.updateOperatorWaitTime());
   }
 
+  Future<bool> saveTestData(String deviceId) async {
+    final now = DateTime.now();
+    try {
+      final fileName = this.state.reportsPath;
+      final filePath = path.join(this.state.reportsPath, fileName);
+      File file = File(filePath);
+
+      for (final line in this.state.testData) {
+        logger.i(filePath);
+        final contents =
+            "${deviceId}, ${now.day}/${now.month}/${now.year}, ${now.hour}:${now.minute}:${now.second}, ${line.map((d) => d.toStringAsFixed(2)).join(", ")}\n";
+        logger.i(contents);
+        await file.writeAsString(contents, mode: FileMode.append);
+      }
+
+      logger.i(filePath);
+    } catch (e, s) {
+      logger.w("Unable to save file", error: e, stackTrace: s);
+      return false;
+    }
+    return true;
+  }
+
+  void updateVarianceValue(int index, double value) =>
+      this.emit(this.state.updateVarianceValue(index, value));
+
+  void updateDifferenceValue(double value) =>
+      this.emit(this.state.copyWith(differenceValue: value));
+
   Future<void> abortTest() async {
     for (final load in ElectronicLoad.values) {
       final port = this.state.getElectronicLoadPort(load)!;
@@ -185,9 +235,12 @@ class ViewUpdater extends Cubit<Model> {
 
     final testStep = this.state.getTestStep();
 
+    this._stopPwm();
+
     if (testStep != null &&
-        testStep is LoadTestStep &&
-        testStep.zeroWhenFinished) {
+            (testStep is LoadTestStep && testStep.zeroWhenFinished) ||
+        (testStep is PwmTestStep) ||
+        (testStep is CheckTestStep)) {
       for (final load in ElectronicLoad.values) {
         final port = this.state.getElectronicLoadPort(load)!;
         await this._dcInput(load, false);
@@ -198,7 +251,29 @@ class ViewUpdater extends Cubit<Model> {
             .setElectronicLoadValues(load, setCurrent: 0, setVoltage: 0));
       }
     }
-    this.emit(this.state.moveToNextStep());
+    var newState =
+        this.state.copyWith(pwmState: PwmState.ready).moveToNextStep();
+
+    {
+      final testStep = newState.getTestStep();
+      if (testStep != null && testStep is CheckTestStep) {
+        final port = newState.getElectronicLoadPort(ElectronicLoad.current)!;
+        await this._setCurrent(port, testStep.current);
+        await this._dcInput(ElectronicLoad.current, true);
+      }
+    }
+
+    this.emit(newState);
+  }
+
+  Future<void> init() async {
+    final testStep = this.state.getTestStep();
+    if (testStep != null && testStep is CheckTestStep) {
+      logger.i("Initializing check step");
+      final port = this.state.getElectronicLoadPort(ElectronicLoad.current)!;
+      await this._setCurrent(port, testStep.current);
+      await this._dcInput(ElectronicLoad.current, true);
+    }
   }
 
   Future<void> _dcInput(ElectronicLoad electronicLoad, bool enable) async {
@@ -208,11 +283,25 @@ class ViewUpdater extends Cubit<Model> {
     this.emit(this.state.updateDcInput(electronicLoad, enable));
   }
 
-  Future<void> startPwm(ElectronicLoad electronicLoad) async {
+  Future<void> startPwm(
+      ElectronicLoad electronicLoad, double voltage, double current) async {
+    final port = this.state.getElectronicLoadPort(electronicLoad)!;
+
+    {
+      final int value = (((voltage * 10) * 0xD0E5) / (1020 * 10)).floor();
+      await this.writeHoldingRegister(port, _voltageAddress, value);
+    }
+    {
+      await this._setCurrent(port, current);
+    }
+    await this._dcInput(electronicLoad, true);
+
+    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 1, 1);
     this.emit(this.state.copyWith(pwmState: PwmState.active));
   }
 
-  Future<void> stopPwm(ElectronicLoad electronicLoad) async {
+  Future<void> _stopPwm() async {
+    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 1, 0);
     this.emit(this.state.copyWith(pwmState: PwmState.ready));
   }
 
@@ -342,7 +431,7 @@ class ViewUpdater extends Cubit<Model> {
       return;
     }
 
-    await this.writeHoldingRegister(port, _voltageAddress, 0);
+    await this.writeHoldingRegister(port, address, 0);
     await this._dcInput(electronicLoad, true);
 
     double actualValue = start;
@@ -358,6 +447,11 @@ class ViewUpdater extends Cubit<Model> {
       final int value = (((actualValue * 10) * maxX) / (maxY * 10)).floor();
       await this.writeHoldingRegister(port, address, value);
     }
+  }
+
+  Future<void> _setCurrent(ModbusClientSerialRtu port, double current) async {
+    final int value = (((current * 10) * 0xD0E5) / (40.8 * 10)).floor();
+    await this.writeHoldingRegister(port, _currentAddress, value);
   }
 }
 
@@ -455,12 +549,35 @@ TestStep? testStepFromJson(dynamic json) {
             final String? title = cast<String>(jsonMap[_jsonTitle]);
             final String? description = cast<String>(jsonMap[_jsonDescription]);
             final double voltage = cast<num>(jsonMap[_jsonVoltage])!.toDouble();
+            final double current = cast<num>(jsonMap[_jsonCurrent])!.toDouble();
 
             return PwmTestStep(
               electronicLoad: electronicLoad,
               title: title ?? "",
               description: description ?? "",
               voltage: voltage,
+              current: current,
+            );
+          }
+        case _jsonTargetCheck:
+          {
+            final String? title = cast<String>(jsonMap[_jsonTitle]);
+            final String? description = cast<String>(jsonMap[_jsonDescription]);
+            final double maxVariance =
+                cast<num>(jsonMap[_jsonMaxVariance])!.toDouble();
+            final double targetValue =
+                cast<num>(jsonMap[_jsonTargetValue])!.toDouble();
+            final double maxDifference =
+                cast<num>(jsonMap[_jsonMaxDifference])!.toDouble();
+            final double current = cast<num>(jsonMap[_jsonCurrent])!.toDouble();
+
+            return CheckTestStep(
+              title: title ?? "",
+              description: description ?? "",
+              maxVariance: maxVariance,
+              targetValue: targetValue,
+              maxDifference: maxDifference,
+              current: current,
             );
           }
         default:

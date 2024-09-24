@@ -21,8 +21,7 @@ class App extends StatelessWidget {
       home: BlocProvider(
         create: (_) {
           final cubit = ViewUpdater();
-          cubit.loadTestConfiguration();
-          cubit.findPorts();
+          cubit.loadTestConfiguration().then((_) => cubit.findPorts());
 
           Timer.periodic(const Duration(seconds: 1), (_) {
             cubit.updateState();
