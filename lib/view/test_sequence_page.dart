@@ -2,7 +2,6 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter/widgets.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mks_eol/controller/view_updater.dart';
 import 'package:mks_eol/model/model.dart';
@@ -77,7 +76,6 @@ class _TestSequenceView extends StatelessWidget {
             child: SizedBox.expand(
               child: switch (testStep) {
                 DescriptiveTestStep step => _DescriptiveTestStepView(step),
-                CheckTestStep step => _CheckTestStepView(step),
                 PwmTestStep step => _PwmTestStepView(step),
                 LoadTestStep step => _CurveTestStepView(step),
                 FinalTestStep _ => const _FinalTestStepWidget(),
@@ -168,9 +166,9 @@ class _FinalTestStepWidget extends StatelessWidget {
 }
 
 class _CheckTestStepView extends StatelessWidget {
-  final CheckTestStep testStep;
+  final CheckParameters parameters;
 
-  const _CheckTestStepView(this.testStep);
+  const _CheckTestStepView(this.parameters);
 
   @override
   Widget build(BuildContext context) {
@@ -180,21 +178,9 @@ class _CheckTestStepView extends StatelessWidget {
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Expanded(
-            child:
-                Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-          if (this.testStep.title.isNotEmpty)
-            Text(
-              this.testStep.title,
-              style: const TextStyle(fontWeight: FontWeight.w800),
-            ),
-          Center(
-              child:
-                  Text(this.testStep.description, textAlign: TextAlign.center)),
-        ])),
-        Expanded(
             child: Column(children: [
           Text(
-              "I seguenti valori devono essere entro ${this.testStep.maxVariance} l'uno dall'altro"),
+              "I seguenti valori devono essere entro ${this.parameters.maxVariance} l'uno dall'altro"),
           Wrap(
               spacing: 32,
               runSpacing: 32,
@@ -222,7 +208,7 @@ class _CheckTestStepView extends StatelessWidget {
         Expanded(
           child: Column(children: [
             Text(
-                "Il seguente valore deve essere entro ${this.testStep.maxDifference} da ${this.testStep.targetValue}"),
+                "Il seguente valore deve essere entro ${this.parameters.maxDifference} da ${this.parameters.targetValue}"),
             SizedBox(
                 width: 200,
                 child: TextField(
@@ -387,16 +373,18 @@ class _CurveTestStepView extends StatelessWidget {
                         ? const SizedBox()
                         : const Text("Valori fuori dai limiti richiesti!"),
                   },
-                  Text(
-                      "Tensione: ${model.getVoltage(electronicLoad).toStringAsFixed(2)} V\nCorrente ${model.getAmperes(electronicLoad).toStringAsFixed(2)} A\nPotenza ${model.getPower(electronicLoad).toStringAsFixed(2)} Watt"),
                 ]),
                 state == _CurveTestStepState.done
                     ? Text(this.testStep.finalDescription)
                     : Text(this.testStep.description),
               ]),
           const SizedBox(height: 32),
-          if (this.testStep.imagePaths.isNotEmpty)
+          if (state != _CurveTestStepState.done &&
+              this.testStep.imagePaths.isNotEmpty)
             Expanded(flex: 2, child: _imageWrap(this.testStep.imagePaths)),
+          if (state == _CurveTestStepState.done &&
+              this.testStep.checkParameters.isPresent)
+            _CheckTestStepView(this.testStep.checkParameters.value)
         ],
       )),
       const SizedBox(height: 32),

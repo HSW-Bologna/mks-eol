@@ -1,13 +1,21 @@
 {
     "steps": [
         {
-            "target": "check",
-            "title": "Controllo valori",
-            "description": "Verificare i seguenti valori",
-            "maxVariance": 1.5,
-            "targetValue": 10,
-            "maxDifference": 2,
-            "current": 2.0
+            "target": "load",
+            "electronicLoad": 0,
+            "title": "Test a bassa tensione",
+            "description": "Verifica carico a bassa tensione",
+            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 180 Watt",
+            "current": {
+                "target": 2.0,
+                "step": 0.5,
+                "period": 0.2
+            },
+            "manualCheck": {
+                "maxVariance": 1.5,
+                "targetValue": 10,
+                "maxDifference": 2
+            }
         },
         {
             "target": "pwm",
@@ -84,6 +92,11 @@
                 "target": 2.0,
                 "step": 0.5,
                 "period": 0.2
+            },
+            "manualCheck": {
+                "maxVariance": 1.5,
+                "targetValue": 10,
+                "maxDifference": 2
             }
         },
         {

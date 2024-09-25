@@ -22,25 +22,6 @@ class FinalTestStep extends TestStep {
 }
 
 @immutable
-class CheckTestStep extends TestStep {
-  final String title;
-  final String description;
-  final double maxVariance;
-  final double targetValue;
-  final double current;
-  final double maxDifference;
-
-  CheckTestStep({
-    required this.title,
-    required this.description,
-    required this.maxVariance,
-    required this.targetValue,
-    required this.maxDifference,
-    required this.current,
-  });
-}
-
-@immutable
 class DescriptiveTestStep extends TestStep {
   final String title;
   final String description;
@@ -63,6 +44,12 @@ typedef Curve = ({
   double maxAcceptable,
 });
 
+typedef CheckParameters = ({
+  double maxVariance,
+  double targetValue,
+  double maxDifference,
+});
+
 @immutable
 class LoadTestStep extends TestStep {
   final String title;
@@ -73,6 +60,7 @@ class LoadTestStep extends TestStep {
   final String finalDescription;
   final List<String> imagePaths;
   final bool zeroWhenFinished;
+  final Optional<CheckParameters> checkParameters;
 
   LoadTestStep({
     required this.electronicLoad,
@@ -83,6 +71,7 @@ class LoadTestStep extends TestStep {
     this.voltageCurve,
     this.imagePaths = const <String>[],
     this.zeroWhenFinished = true,
+    this.checkParameters = const Optional.empty(),
   });
 }
 
@@ -228,7 +217,8 @@ extension Impl on Model {
 
       final currentStep = this.getTestStep();
       if (currentStep != null &&
-          currentStep is CheckTestStep &&
+          (currentStep is LoadTestStep &&
+              currentStep.checkParameters.isPresent) &&
           this.canProceed()) {
         testData.add([
           this.getVarianceValue(0),
@@ -370,7 +360,7 @@ extension Impl on Model {
   bool canProceed() {
     final testStep = this.getTestStep();
     if (testStep != null) {
-      if (testStep is LoadTestStep) {
+      if (testStep is LoadTestStep && testStep.checkParameters.isEmpty) {
         final load = testStep.electronicLoad;
         final amperes = this.getAmperes(load);
         final volts = this.getVoltage(load);
@@ -387,15 +377,18 @@ extension Impl on Model {
                 (testStep.voltageCurve?.maxAcceptable ?? double.infinity));
       } else if (testStep is DescriptiveTestStep) {
         return this.getOperatorWaitTime() <= 0;
-      } else if (testStep is CheckTestStep) {
+      } else if (testStep is LoadTestStep &&
+          testStep.checkParameters.isPresent) {
         bool isWithinRange(double value, double target, double difference) =>
             value >= target - difference && value <= target + difference;
         return isWithinRange(this.getVarianceValue(0), this.getVarianceValue(1),
-                testStep.maxVariance) &&
+                testStep.checkParameters.value.maxVariance) &&
             isWithinRange(this.getVarianceValue(1), this.getVarianceValue(2),
-                testStep.maxVariance) &&
-            isWithinRange(this.differenceValue, testStep.targetValue,
-                testStep.maxDifference);
+                testStep.checkParameters.value.maxVariance) &&
+            isWithinRange(
+                this.differenceValue,
+                testStep.checkParameters.value.targetValue,
+                testStep.checkParameters.value.maxDifference);
       } else {
         return true;
       }
