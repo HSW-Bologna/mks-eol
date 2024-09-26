@@ -13,7 +13,6 @@ import 'package:modbus_client/modbus_client.dart';
 import 'package:modbus_client_serial/modbus_client_serial.dart';
 import 'package:optional/optional.dart';
 import 'package:result_type/result_type.dart';
-import 'package:path/path.dart' as path;
 
 const int _deviceClassAddress = 0;
 const int _remoteModeAddress = 402;
@@ -28,7 +27,7 @@ const String _jsonTarget = "target";
 const String _jsonTargetOperator = "operator";
 const String _jsonTargetLoad = "load";
 const String _jsonTargetPwm = "pwm";
-const String _jsonTargetCheck = "check";
+const String _jsonManualCheck = "manualCheck";
 const String _jsonTargetValue = "targetValue";
 const String _jsonMaxVariance = "maxVariance";
 const String _jsonMaxDifference = "maxDifference";
@@ -154,8 +153,6 @@ class ViewUpdater extends Cubit<Model> {
         await this.writeHoldingRegister(port, _currentAddress, 0);
         await this.writeHoldingRegister(port, _voltageAddress, 0);
       }
-
-      await this.init();
     }
   }
 
@@ -190,16 +187,19 @@ class ViewUpdater extends Cubit<Model> {
     final now = DateTime.now();
     try {
       final fileName = this.state.reportsPath;
-      final filePath = path.join(this.state.reportsPath, fileName);
+      final filePath = fileName;
       File file = File(filePath);
 
+      var contents =
+          "${deviceId}, ${now.day}/${now.month}/${now.year}, ${now.hour}:${now.minute}:${now.second}";
+
       for (final line in this.state.testData) {
-        logger.i(filePath);
-        final contents =
-            "${deviceId}, ${now.day}/${now.month}/${now.year}, ${now.hour}:${now.minute}:${now.second}, ${line.map((d) => d.toStringAsFixed(2)).join(", ")}\n";
-        logger.i(contents);
-        await file.writeAsString(contents, mode: FileMode.append);
+        contents += ", ${line.map((d) => d.toStringAsFixed(2)).join(", ")}";
       }
+
+      contents += "\n";
+
+      await file.writeAsString(contents, mode: FileMode.append);
 
       logger.i(filePath);
     } catch (e, s) {
@@ -239,8 +239,7 @@ class ViewUpdater extends Cubit<Model> {
 
     if (testStep != null &&
             (testStep is LoadTestStep && testStep.zeroWhenFinished) ||
-        (testStep is PwmTestStep) ||
-        (testStep is CheckTestStep)) {
+        (testStep is PwmTestStep)) {
       for (final load in ElectronicLoad.values) {
         final port = this.state.getElectronicLoadPort(load)!;
         await this._dcInput(load, false);
@@ -253,27 +252,7 @@ class ViewUpdater extends Cubit<Model> {
     }
     var newState =
         this.state.copyWith(pwmState: PwmState.ready).moveToNextStep();
-
-    {
-      final testStep = newState.getTestStep();
-      if (testStep != null && testStep is CheckTestStep) {
-        final port = newState.getElectronicLoadPort(ElectronicLoad.current)!;
-        await this._setCurrent(port, testStep.current);
-        await this._dcInput(ElectronicLoad.current, true);
-      }
-    }
-
     this.emit(newState);
-  }
-
-  Future<void> init() async {
-    final testStep = this.state.getTestStep();
-    if (testStep != null && testStep is CheckTestStep) {
-      logger.i("Initializing check step");
-      final port = this.state.getElectronicLoadPort(ElectronicLoad.current)!;
-      await this._setCurrent(port, testStep.current);
-      await this._dcInput(ElectronicLoad.current, true);
-    }
   }
 
   Future<void> _dcInput(ElectronicLoad electronicLoad, bool enable) async {
@@ -510,6 +489,26 @@ TestStep? testStepFromJson(dynamic json) {
             final model.Curve? current = curveFromJson(jsonMap[_jsonCurrent]);
             final model.Curve? voltage = curveFromJson(jsonMap[_jsonVoltage]);
 
+            final jsonCheckParameters =
+                cast<Map<String, dynamic>>(jsonMap[_jsonManualCheck]);
+
+            Optional<CheckParameters> checkParameters = const Optional.empty();
+            if (jsonCheckParameters != null) {
+              final double maxVariance =
+                  cast<num>(jsonCheckParameters[_jsonMaxVariance])!.toDouble();
+              final double targetValue =
+                  cast<num>(jsonCheckParameters[_jsonTargetValue])!.toDouble();
+              final double maxDifference =
+                  cast<num>(jsonCheckParameters[_jsonMaxDifference])!
+                      .toDouble();
+
+              checkParameters = Optional.of((
+                maxVariance: maxVariance,
+                targetValue: targetValue,
+                maxDifference: maxDifference
+              ));
+            }
+
             return LoadTestStep(
               electronicLoad: electronicLoad,
               title: title ?? "",
@@ -519,6 +518,7 @@ TestStep? testStepFromJson(dynamic json) {
               currentCurve: current,
               voltageCurve: voltage,
               zeroWhenFinished: zeroWhenFinished ?? true,
+              checkParameters: checkParameters,
             );
           }
         case _jsonTargetOperator:
@@ -556,27 +556,6 @@ TestStep? testStepFromJson(dynamic json) {
               title: title ?? "",
               description: description ?? "",
               voltage: voltage,
-              current: current,
-            );
-          }
-        case _jsonTargetCheck:
-          {
-            final String? title = cast<String>(jsonMap[_jsonTitle]);
-            final String? description = cast<String>(jsonMap[_jsonDescription]);
-            final double maxVariance =
-                cast<num>(jsonMap[_jsonMaxVariance])!.toDouble();
-            final double targetValue =
-                cast<num>(jsonMap[_jsonTargetValue])!.toDouble();
-            final double maxDifference =
-                cast<num>(jsonMap[_jsonMaxDifference])!.toDouble();
-            final double current = cast<num>(jsonMap[_jsonCurrent])!.toDouble();
-
-            return CheckTestStep(
-              title: title ?? "",
-              description: description ?? "",
-              maxVariance: maxVariance,
-              targetValue: targetValue,
-              maxDifference: maxDifference,
               current: current,
             );
           }
