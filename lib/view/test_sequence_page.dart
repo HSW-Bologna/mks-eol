@@ -228,16 +228,6 @@ class _CheckTestStepView extends StatelessWidget {
                 )),
           ]),
         ),
-        const SizedBox(height: 32),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _cancelButton(context),
-            _proceedButton(model.canProceed()
-                ? () => context.read<ViewUpdater>().moveToNextStep()
-                : null),
-          ],
-        )
       ],
     );
   }
@@ -353,38 +343,30 @@ class _CurveTestStepView extends StatelessWidget {
               this.testStep.title,
               style: const TextStyle(fontWeight: FontWeight.w800),
             ),
-          Wrap(
-              direction: Axis.horizontal,
-              alignment: WrapAlignment.spaceBetween,
-              runAlignment: WrapAlignment.center,
-              spacing: 32,
-              runSpacing: 32,
-              children: [
-                const SizedBox(height: 32),
-                Column(children: [
-                  switch (state) {
-                    _CurveTestStepState.ready => Text(
-                        "Test di raggiungimento ${this.testStep.currentCurve?.target ?? 0.0} A / ${this.testStep.voltageCurve?.target ?? 0.0} V"),
-                    _CurveTestStepState.voltageRamp =>
-                      const Text("Incremento della tensione in corso..."),
-                    _CurveTestStepState.currentRamp =>
-                      const Text("Incremento della corrente in corso..."),
-                    _CurveTestStepState.done => model.canProceed()
-                        ? const SizedBox()
-                        : const Text("Valori fuori dai limiti richiesti!"),
-                  },
-                ]),
-                state == _CurveTestStepState.done
-                    ? Text(this.testStep.finalDescription)
-                    : Text(this.testStep.description),
-              ]),
+          const SizedBox(height: 32),
+          Column(children: [
+            switch (state) {
+              _CurveTestStepState.ready => Text(
+                  "Test di raggiungimento ${this.testStep.currentCurve?.target ?? 0.0} A / ${this.testStep.voltageCurve?.target ?? 0.0} V"),
+              _CurveTestStepState.voltageRamp =>
+                const Text("Incremento della tensione in corso..."),
+              _CurveTestStepState.currentRamp =>
+                const Text("Incremento della corrente in corso..."),
+              _CurveTestStepState.done => const SizedBox(),
+            },
+          ]),
+          state == _CurveTestStepState.done
+              ? Text(this.testStep.finalDescription)
+              : Text(this.testStep.description),
           const SizedBox(height: 32),
           if (state != _CurveTestStepState.done &&
               this.testStep.imagePaths.isNotEmpty)
             Expanded(flex: 2, child: _imageWrap(this.testStep.imagePaths)),
           if (state == _CurveTestStepState.done &&
               this.testStep.checkParameters.isPresent)
-            _CheckTestStepView(this.testStep.checkParameters.value)
+            Expanded(
+                flex: 2,
+                child: _CheckTestStepView(this.testStep.checkParameters.value))
         ],
       )),
       const SizedBox(height: 32),

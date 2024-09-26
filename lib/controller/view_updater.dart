@@ -190,13 +190,16 @@ class ViewUpdater extends Cubit<Model> {
       final filePath = fileName;
       File file = File(filePath);
 
+      var contents =
+          "${deviceId}, ${now.day}/${now.month}/${now.year}, ${now.hour}:${now.minute}:${now.second}";
+
       for (final line in this.state.testData) {
-        logger.i(filePath);
-        final contents =
-            "${deviceId}, ${now.day}/${now.month}/${now.year}, ${now.hour}:${now.minute}:${now.second}, ${line.map((d) => d.toStringAsFixed(2)).join(", ")}\n";
-        logger.i(contents);
-        await file.writeAsString(contents, mode: FileMode.append);
+        contents += ", ${line.map((d) => d.toStringAsFixed(2)).join(", ")}";
       }
+
+      contents += "\n";
+
+      await file.writeAsString(contents, mode: FileMode.append);
 
       logger.i(filePath);
     } catch (e, s) {
