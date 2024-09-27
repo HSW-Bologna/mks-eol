@@ -80,40 +80,6 @@ class HomePage extends StatelessWidget {
       child: Builder(builder: (context) {
         final model = context.watch<ViewUpdater>().state;
 
-        final registerOperation = (
-          TextEditingController controller,
-          String label,
-          void Function(String?, String?) onChange,
-          void Function() onRead,
-          void Function() onWrite,
-        ) =>
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Expanded(
-                    child: TextField(
-                  decoration: InputDecoration(labelText: "$label address"),
-                  keyboardType: TextInputType.number,
-                  onChanged: (value) => onChange(value, null),
-                  inputFormatters: <TextInputFormatter>[
-                    FilteringTextInputFormatter.digitsOnly
-                  ], // Only numbers can be entered
-                )),
-                Expanded(
-                    child: TextField(
-                  controller: controller,
-                  decoration: InputDecoration(labelText: "$label value"),
-                  keyboardType: TextInputType.number,
-                  onChanged: (value) => onChange(null, value),
-                  inputFormatters: <TextInputFormatter>[
-                    FilteringTextInputFormatter.digitsOnly
-                  ], // Only numbers can be entered
-                )),
-                ElevatedButton(onPressed: onRead, child: const Text("Read")),
-                ElevatedButton(onPressed: onWrite, child: const Text("Write")),
-              ],
-            );
-
         final pageCubit = context.read<_PageCubit>();
 
         return Scaffold(
@@ -130,7 +96,7 @@ Widget _statusMessage() =>
       if (model.isWaitingForConfiguration()) {
         return const Text("Attendere...");
       } else if (model.isThereAConfigurationError()) {
-        return Expanded(
+        return Center(
             child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
@@ -145,7 +111,7 @@ Widget _statusMessage() =>
                       padding: EdgeInsets.all(8), child: Text("Riprova")))
             ]));
       } else if (model.isThereAConnectionError()) {
-        return Expanded(
+        return Center(
             child: Column(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 crossAxisAlignment: CrossAxisAlignment.center,
