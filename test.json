@@ -2,6 +2,16 @@
     "reportsPath": "reports.csv",
     "steps": [
         {
+            "target": "operator",
+            "title": "Echo banana",
+            "command": "echo banana >> /tmp/roba.txt"
+        },
+        {
+            "target": "operator",
+            "title": "Echo zuppa",
+            "command": "echo zuppa >> /tmp/roba.txt"
+        },
+        {
             "target": "load",
             "electronicLoad": 0,
             "title": "Test a bassa tensione",
