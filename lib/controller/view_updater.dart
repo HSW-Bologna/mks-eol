@@ -28,6 +28,7 @@ const String _jsonTargetOperator = "operator";
 const String _jsonTargetLoad = "load";
 const String _jsonTargetPwm = "pwm";
 const String _jsonManualCheck = "manualCheck";
+const String _jsonCommand = "command";
 const String _jsonTargetValue = "targetValue";
 const String _jsonMaxVariance = "maxVariance";
 const String _jsonMaxDifference = "maxDifference";
@@ -153,6 +154,21 @@ class ViewUpdater extends Cubit<Model> {
         await this.writeHoldingRegister(port, _currentAddress, 0);
         await this.writeHoldingRegister(port, _voltageAddress, 0);
       }
+
+      {
+        final testStep = this.state.getTestStep();
+        if (testStep is DescriptiveTestStep && testStep.command != null) {
+          try {
+            var arguments = testStep.command!.split(" ");
+            final executable = arguments.first;
+            arguments.removeAt(0);
+
+            await Process.run(executable, arguments, runInShell: true);
+          } catch (e, s) {
+            logger.w("Unable to run command", error: e, stackTrace: s);
+          }
+        }
+      }
     }
   }
 
@@ -252,6 +268,22 @@ class ViewUpdater extends Cubit<Model> {
     }
     var newState =
         this.state.copyWith(pwmState: PwmState.ready).moveToNextStep();
+
+    {
+      final testStep = newState.getTestStep();
+      if (testStep is DescriptiveTestStep && testStep.command != null) {
+        try {
+          var arguments = testStep.command!.split(" ");
+          final executable = arguments.first;
+          arguments.removeAt(0);
+
+          await Process.run(executable, arguments, runInShell: true);
+        } catch (e, s) {
+          logger.w("Unable to run command", error: e, stackTrace: s);
+        }
+      }
+    }
+
     this.emit(newState);
   }
 
@@ -527,6 +559,7 @@ TestStep? testStepFromJson(dynamic json) {
             final String? title = cast<String>(jsonMap[_jsonTitle]);
             final String? description = cast<String>(jsonMap[_jsonDescription]);
             final String? image = cast<String>(jsonMap[_jsonImages]);
+            final String? command = cast<String>(jsonMap[_jsonCommand]);
 
             final Duration? delay =
                 seconds != null ? Duration(seconds: seconds) : null;
@@ -537,6 +570,7 @@ TestStep? testStepFromJson(dynamic json) {
                 description ?? "",
                 imagePaths: imagesFromJson(jsonMap[_jsonImages]),
                 delay: delay,
+                command: command,
               );
             } else {
               return null;

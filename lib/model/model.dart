@@ -27,12 +27,14 @@ class DescriptiveTestStep extends TestStep {
   final String description;
   final List<String> imagePaths;
   final Duration? delay;
+  final String? command;
 
   DescriptiveTestStep(
     this.title,
     this.description, {
     this.imagePaths = const <String>[],
     this.delay = null,
+    this.command = null,
   });
 }
 
