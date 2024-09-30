@@ -308,6 +308,9 @@ class _PwmTestStepView extends StatelessWidget {
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
             _cancelButton(context),
+            if (this.testStep.skippable)
+              _skipButton(
+                  () => context.read<ViewUpdater>().moveToNextStep(skip: true)),
             _proceedButton(() {
               final viewUpdater = context.read<ViewUpdater>();
               if (viewUpdater.state.pwmState == PwmState.ready) {
@@ -374,6 +377,9 @@ class _CurveTestStepView extends StatelessWidget {
       const SizedBox(height: 32),
       Row(mainAxisAlignment: MainAxisAlignment.spaceAround, children: [
         _cancelButton(context),
+        if (this.testStep.skippable)
+          _skipButton(
+              () => context.read<ViewUpdater>().moveToNextStep(skip: true)),
         switch (state) {
           _CurveTestStepState.ready => _proceedButton(() async {
               final stateCubit = context.read<_CurveTestStepCubit>();
@@ -437,6 +443,10 @@ Widget _proceedButton(void Function()? onClick) => ElevatedButton(
     onPressed: onClick,
     child: const Padding(padding: EdgeInsets.all(8), child: Text("Prosegui")));
 
+Widget _skipButton(void Function()? onClick) => ElevatedButton(
+    onPressed: onClick,
+    child: const Padding(padding: EdgeInsets.all(8), child: Text("Salta")));
+
 Widget _cancelButton(BuildContext context) {
   return ElevatedButton(
       onPressed: () async {
@@ -446,10 +456,17 @@ Widget _cancelButton(BuildContext context) {
           const Padding(padding: EdgeInsets.all(8), child: Text("Interrompi")));
 }
 
-Widget _bottom(BuildContext context) => Row(
+Widget _bottom(
+  BuildContext context, {
+  bool skippable = false,
+}) =>
+    Row(
       mainAxisAlignment: MainAxisAlignment.spaceAround,
       children: [
         _cancelButton(context),
+        if (skippable)
+          _skipButton(
+              () => context.read<ViewUpdater>().moveToNextStep(skip: true)),
         _proceedButton(() => context.read<ViewUpdater>().moveToNextStep()),
       ],
     );

@@ -28,6 +28,7 @@ const String _jsonTargetOperator = "operator";
 const String _jsonTargetLoad = "load";
 const String _jsonTargetPwm = "pwm";
 const String _jsonManualCheck = "manualCheck";
+const String _jsonSkippable = "skippable";
 const String _jsonCommand = "command";
 const String _jsonTargetValue = "targetValue";
 const String _jsonMaxVariance = "maxVariance";
@@ -95,6 +96,13 @@ class ViewUpdater extends Cubit<Model> {
             unitId: address,
             responseTimeout: const Duration(milliseconds: 2000),
           );
+
+          /*
+              firstPort = client;
+              secondPort = client;
+              thirdPort = client;
+              break;
+              */
 
           final int deviceType =
               await this._readHoldingRegister(client, _deviceClassAddress);
@@ -247,8 +255,8 @@ class ViewUpdater extends Cubit<Model> {
     this.emit(this.state.copyWith(testIndex: 0));
   }
 
-  Future<void> moveToNextStep() async {
-    if (!this.state.canProceed()) {
+  Future<void> moveToNextStep({bool skip = false}) async {
+    if (!this.state.canProceed() && !skip) {
       return;
     }
 
@@ -269,8 +277,11 @@ class ViewUpdater extends Cubit<Model> {
             .setElectronicLoadValues(load, setCurrent: 0, setVoltage: 0));
       }
     }
-    var newState =
-        this.state.copyWith(pwmState: PwmState.ready).moveToNextStep();
+
+    var newState = this
+        .state
+        .copyWith(pwmState: PwmState.ready)
+        .moveToNextStep(skip: skip);
 
     {
       final testStep = newState.getTestStep();
@@ -523,7 +534,8 @@ TestStep? testStepFromJson(dynamic json) {
             final String? finalDescription =
                 cast<String>(jsonMap[_jsonFinalDescription]);
             final bool? zeroWhenFinished =
-                cast<bool?>(jsonMap[_jsonZeroWhenFinished]);
+                cast<bool>(jsonMap[_jsonZeroWhenFinished]);
+            final bool? skippable = cast<bool>(jsonMap[_jsonSkippable]);
 
             final model.Curve? current = curveFromJson(jsonMap[_jsonCurrent]);
             final model.Curve? voltage = curveFromJson(jsonMap[_jsonVoltage]);
@@ -558,6 +570,7 @@ TestStep? testStepFromJson(dynamic json) {
               voltageCurve: voltage,
               zeroWhenFinished: zeroWhenFinished ?? true,
               checkParameters: checkParameters,
+              skippable: skippable ?? false,
             );
           }
         case _jsonTargetOperator:
@@ -566,6 +579,7 @@ TestStep? testStepFromJson(dynamic json) {
             final String? title = cast<String>(jsonMap[_jsonTitle]);
             final String? description = cast<String>(jsonMap[_jsonDescription]);
             final String? command = cast<String>(jsonMap[_jsonCommand]);
+            final bool? skippable = cast<bool>(jsonMap[_jsonSkippable]);
 
             final Duration? delay =
                 seconds != null ? Duration(seconds: seconds) : null;
@@ -576,6 +590,7 @@ TestStep? testStepFromJson(dynamic json) {
               imagePaths: imagesFromJson(jsonMap[_jsonImages]),
               delay: delay,
               command: command,
+              skippable: skippable ?? false,
             );
           }
         case _jsonTargetPwm:
@@ -586,6 +601,7 @@ TestStep? testStepFromJson(dynamic json) {
             final String? description = cast<String>(jsonMap[_jsonDescription]);
             final double voltage = cast<num>(jsonMap[_jsonVoltage])!.toDouble();
             final double current = cast<num>(jsonMap[_jsonCurrent])!.toDouble();
+            final bool? skippable = cast<bool>(jsonMap[_jsonSkippable]);
 
             return PwmTestStep(
               electronicLoad: electronicLoad,
@@ -594,6 +610,7 @@ TestStep? testStepFromJson(dynamic json) {
               imagePaths: imagesFromJson(jsonMap[_jsonImages]),
               voltage: voltage,
               current: current,
+              skippable: skippable ?? false,
             );
           }
         default:

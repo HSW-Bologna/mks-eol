@@ -28,6 +28,7 @@ class DescriptiveTestStep extends TestStep {
   final List<String> imagePaths;
   final Duration? delay;
   final String? command;
+  final bool skippable;
 
   DescriptiveTestStep(
     this.title,
@@ -35,6 +36,7 @@ class DescriptiveTestStep extends TestStep {
     this.imagePaths = const <String>[],
     this.delay = null,
     this.command = null,
+    this.skippable = false,
   });
 }
 
@@ -62,6 +64,7 @@ class LoadTestStep extends TestStep {
   final String finalDescription;
   final List<String> imagePaths;
   final bool zeroWhenFinished;
+  final bool skippable;
   final Optional<CheckParameters> checkParameters;
 
   LoadTestStep({
@@ -73,6 +76,7 @@ class LoadTestStep extends TestStep {
     this.voltageCurve,
     this.imagePaths = const <String>[],
     this.zeroWhenFinished = true,
+    this.skippable = false,
     this.checkParameters = const Optional.empty(),
   });
 }
@@ -85,6 +89,7 @@ class PwmTestStep extends TestStep {
   final List<String> imagePaths;
   final double voltage;
   final double current;
+  final bool skippable;
 
   PwmTestStep({
     required this.title,
@@ -93,6 +98,7 @@ class PwmTestStep extends TestStep {
     required this.voltage,
     required this.current,
     required this.imagePaths,
+    this.skippable = false,
   });
 }
 
@@ -215,7 +221,7 @@ extension Impl on Model {
     return this.copyWith(varianceValues: newValues);
   }
 
-  Model moveToNextStep() {
+  Model moveToNextStep({bool skip = false}) {
     if (this.isConfigured()) {
       List<List<double>> testData = List.from(this.testData);
 
@@ -223,7 +229,8 @@ extension Impl on Model {
       if (currentStep != null &&
           (currentStep is LoadTestStep &&
               currentStep.checkParameters.isPresent) &&
-          this.canProceed()) {
+          this.canProceed() &&
+          !skip) {
         testData.add([
           this.getVarianceValue(0),
           this.getVarianceValue(1),
@@ -360,7 +367,6 @@ extension Impl on Model {
 
   bool isThereAConfigurationError() =>
       this.testSteps.isPresent && this.testSteps.value.isFailure;
-      
 
   bool canProceed() {
     final testStep = this.getTestStep();
