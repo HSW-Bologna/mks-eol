@@ -50,8 +50,7 @@ typedef Curve = ({
 
 typedef CheckParameters = ({
   double maxVariance,
-  double targetValue,
-  double maxDifference,
+  double minValue,
 });
 
 @immutable
@@ -390,18 +389,55 @@ extension Impl on Model {
         return this.getOperatorWaitTime() <= 0;
       } else if (testStep is LoadTestStep &&
           testStep.checkParameters.isPresent) {
-        bool isWithinRange(double value, double target, double difference) =>
-            value >= target - difference && value <= target + difference;
-        return isWithinRange(this.getVarianceValue(0), this.getVarianceValue(1),
-                testStep.checkParameters.value.maxVariance) &&
-            isWithinRange(this.getVarianceValue(1), this.getVarianceValue(2),
-                testStep.checkParameters.value.maxVariance) &&
-            isWithinRange(
-                this.differenceValue,
-                testStep.checkParameters.value.targetValue,
-                testStep.checkParameters.value.maxDifference);
+        return this.isTernaryCheckOk() && this.isPowerCheckOk();
       } else {
         return true;
+      }
+    } else {
+      return false;
+    }
+  }
+
+  double getPowerCheckRatio() {
+    final testStep = this.getTestStep();
+    if (testStep != null) {
+      if (testStep is LoadTestStep && testStep.checkParameters.isPresent) {
+        final power = this.getPower(testStep.electronicLoad);
+        return this.differenceValue / power;
+      } else {
+        return 0;
+      }
+    } else {
+      return 0;
+    }
+  }
+
+  bool isPowerCheckOk() {
+    final testStep = this.getTestStep();
+    if (testStep != null) {
+      if (testStep is LoadTestStep && testStep.checkParameters.isPresent) {
+        return _isWithinRange(this.getPowerCheckRatio(),
+            testStep.checkParameters.value.minValue, 1.0);
+      } else {
+        return false;
+      }
+    } else {
+      return false;
+    }
+  }
+
+  bool isTernaryCheckOk() {
+    final testStep = this.getTestStep();
+    if (testStep != null) {
+      if (testStep is LoadTestStep && testStep.checkParameters.isPresent) {
+        return _isWithinRange(
+                this.getVarianceValue(0),
+                this.getVarianceValue(1),
+                testStep.checkParameters.value.maxVariance) &&
+            _isWithinRange(this.getVarianceValue(1), this.getVarianceValue(2),
+                testStep.checkParameters.value.maxVariance);
+      } else {
+        return false;
       }
     } else {
       return false;
@@ -411,3 +447,6 @@ extension Impl on Model {
   double getVarianceValue(int index) =>
       this.varianceValues.elementAtOrNull(index) ?? 0;
 }
+
+bool _isWithinRange(double value, double target, double difference) =>
+    value >= target - difference && value <= target + difference;

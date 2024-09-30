@@ -168,20 +168,34 @@ class _FinalTestStepWidget extends StatelessWidget {
   }
 }
 
-class _CheckTestStepView extends StatelessWidget {
+class _CheckTestStepView extends StatefulWidget {
   final CheckParameters parameters;
 
   const _CheckTestStepView(this.parameters);
 
   @override
+  State<_CheckTestStepView> createState() => _CheckTestStepState();
+}
+
+class _CheckTestStepState extends State<_CheckTestStepView> {
+  final List<TextEditingController> ternaryControllers = [
+    TextEditingController(),
+    TextEditingController(),
+    TextEditingController()
+  ];
+  final TextEditingController powerController = TextEditingController();
+
+  @override
   Widget build(BuildContext context) {
+    final model = context.watch<ViewUpdater>().state;
+
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
         Expanded(
             child: Column(children: [
           Text(
-              "I seguenti valori devono essere entro ${this.parameters.maxVariance} l'uno dall'altro"),
+              "I seguenti valori devono essere entro ${this.widget.parameters.maxVariance} l'uno dall'altro"),
           Wrap(
               spacing: 32,
               runSpacing: 32,
@@ -190,6 +204,18 @@ class _CheckTestStepView extends StatelessWidget {
                   (index) => SizedBox(
                       width: 200,
                       child: TextField(
+                        controller: this.ternaryControllers[index],
+                        decoration: InputDecoration(
+                            border: OutlineInputBorder(
+                                borderSide: BorderSide(
+                                    width: 4,
+                                    color: model.isTernaryCheckOk() &&
+                                            this
+                                                .ternaryControllers[index]
+                                                .text
+                                                .isNotEmpty
+                                        ? Colors.green
+                                        : Colors.red))),
                         keyboardType: const TextInputType.numberWithOptions(
                             decimal: true),
                         inputFormatters: <TextInputFormatter>[
@@ -209,10 +235,19 @@ class _CheckTestStepView extends StatelessWidget {
         Expanded(
           child: Column(children: [
             Text(
-                "Il seguente valore deve essere entro ${this.parameters.maxDifference} da ${this.parameters.targetValue}"),
+                "Il rapporto tra la potenza e il seguente valore (${model.getPowerCheckRatio().toStringAsFixed(2)}) deve essere tra ${this.widget.parameters.minValue.toStringAsFixed(2)} e 1.00"),
             SizedBox(
                 width: 200,
                 child: TextField(
+                  controller: this.powerController,
+                  decoration: InputDecoration(
+                      border: OutlineInputBorder(
+                          borderSide: BorderSide(
+                              width: 4,
+                              color: model.isPowerCheckOk() &&
+                                      this.powerController.text.isNotEmpty
+                                  ? Colors.green
+                                  : Colors.red))),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   inputFormatters: <TextInputFormatter>[

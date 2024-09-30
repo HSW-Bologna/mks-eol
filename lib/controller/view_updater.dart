@@ -547,16 +547,12 @@ TestStep? testStepFromJson(dynamic json) {
             if (jsonCheckParameters != null) {
               final double maxVariance =
                   cast<num>(jsonCheckParameters[_jsonMaxVariance])!.toDouble();
-              final double targetValue =
-                  cast<num>(jsonCheckParameters[_jsonTargetValue])!.toDouble();
-              final double maxDifference =
-                  cast<num>(jsonCheckParameters[_jsonMaxDifference])!
-                      .toDouble();
+              final double minValue =
+                  cast<num>(jsonCheckParameters[_jsonMin])!.toDouble();
 
               checkParameters = Optional.of((
                 maxVariance: maxVariance,
-                targetValue: targetValue,
-                maxDifference: maxDifference
+                minValue: minValue,
               ));
             }
 
