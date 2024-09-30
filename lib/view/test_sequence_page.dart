@@ -63,8 +63,11 @@ class _TestSequenceView extends StatelessWidget {
           logger.i(event.toString());
           if (event is KeyDownEvent) {
             if (event.logicalKey == LogicalKeyboardKey.enter) {
-              if (testStep is! FinalTestStep) {
-                context.read<ViewUpdater>().moveToNextStep();
+              if (testStep != null && testStep is FinalTestStep) {
+                final callback = _testStepCallback(testStep, context);
+                if (callback != null) {
+                  callback();
+                }
               }
             } else if (event.logicalKey == LogicalKeyboardKey.escape) {
               await _abort(context);
@@ -172,8 +175,6 @@ class _CheckTestStepView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final model = context.watch<ViewUpdater>().state;
-
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: [
@@ -262,7 +263,7 @@ class _DescriptiveTestStepView extends StatelessWidget {
         ])),
         if (this.testStep.delay == null || waitTime <= 0) ...[
           const SizedBox(height: 32),
-          _bottom(context)
+          _bottom(this.testStep, context)
         ],
         if (this.testStep.delay != null && waitTime > 0) ...[
           waitTime == 1
@@ -282,6 +283,7 @@ class _PwmTestStepView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final model = context.watch<ViewUpdater>().state;
+    final state = context.watch<_CurveTestStepCubit>().state;
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -311,15 +313,8 @@ class _PwmTestStepView extends StatelessWidget {
             if (this.testStep.skippable)
               _skipButton(
                   () => context.read<ViewUpdater>().moveToNextStep(skip: true)),
-            _proceedButton(() {
-              final viewUpdater = context.read<ViewUpdater>();
-              if (viewUpdater.state.pwmState == PwmState.ready) {
-                viewUpdater.startPwm(this.testStep.electronicLoad,
-                    this.testStep.voltage, this.testStep.current);
-              } else {
-                viewUpdater.moveToNextStep();
-              }
-            }),
+            _proceedButton(_testStepCallback(this.testStep, context),
+                text: state == _CurveTestStepState.ready ? "Start" : null),
           ],
         ),
       ],
@@ -335,8 +330,6 @@ class _CurveTestStepView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final state = context.watch<_CurveTestStepCubit>().state;
-    final model = context.watch<ViewUpdater>().state;
-    final electronicLoad = this.testStep.electronicLoad;
 
     return Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
       Expanded(
@@ -380,43 +373,7 @@ class _CurveTestStepView extends StatelessWidget {
         if (this.testStep.skippable)
           _skipButton(
               () => context.read<ViewUpdater>().moveToNextStep(skip: true)),
-        switch (state) {
-          _CurveTestStepState.ready => _proceedButton(() async {
-              final stateCubit = context.read<_CurveTestStepCubit>();
-              final viewUpdater = context.read<ViewUpdater>();
-
-              if (this.testStep.currentCurve != null) {
-                stateCubit.startCurrentRamp();
-                await viewUpdater.currentCurve(
-                  electronicLoad,
-                  this.testStep.currentCurve!.target,
-                  this.testStep.currentCurve!.step,
-                  this.testStep.currentCurve!.period,
-                );
-              }
-              if (this.testStep.voltageCurve != null) {
-                stateCubit.startVoltageRamp();
-                await viewUpdater.voltageCurve(
-                  electronicLoad,
-                  this.testStep.voltageCurve!.target,
-                  this.testStep.voltageCurve!.step,
-                  this.testStep.voltageCurve!.period,
-                );
-              }
-
-              stateCubit.rampDone();
-            }),
-          _CurveTestStepState.done => _proceedButton(model.canProceed()
-              ? () async {
-                  final viewUpdater = context.read<ViewUpdater>();
-                  final stateCubit = context.read<_CurveTestStepCubit>();
-
-                  await viewUpdater.moveToNextStep();
-                  stateCubit.resetStep();
-                }
-              : null),
-          _ => const SizedBox(),
-        }
+        _proceedButton(_testStepCallback(this.testStep, context)),
       ]),
     ]);
   }
@@ -439,9 +396,11 @@ Widget _imageWrap(List<String> imagePaths) {
   });
 }
 
-Widget _proceedButton(void Function()? onClick) => ElevatedButton(
-    onPressed: onClick,
-    child: const Padding(padding: EdgeInsets.all(8), child: Text("Prosegui")));
+Widget _proceedButton(void Function()? onClick, {String? text}) =>
+    ElevatedButton(
+        onPressed: onClick,
+        child: Padding(
+            padding: const EdgeInsets.all(8), child: Text(text ?? "Prosegui")));
 
 Widget _skipButton(void Function()? onClick) => ElevatedButton(
     onPressed: onClick,
@@ -457,6 +416,7 @@ Widget _cancelButton(BuildContext context) {
 }
 
 Widget _bottom(
+  TestStep testStep,
   BuildContext context, {
   bool skippable = false,
 }) =>
@@ -467,7 +427,7 @@ Widget _bottom(
         if (skippable)
           _skipButton(
               () => context.read<ViewUpdater>().moveToNextStep(skip: true)),
-        _proceedButton(() => context.read<ViewUpdater>().moveToNextStep()),
+        _proceedButton(_testStepCallback(testStep, context)),
       ],
     );
 
@@ -494,5 +454,70 @@ Future<void> _abort(BuildContext context) async {
               )) ==
       true) {
     viewUpdater.abortTest();
+  }
+}
+
+void Function()? _testStepCallback(TestStep testStep, BuildContext context) {
+  switch (testStep) {
+    case PwmTestStep testStep:
+      return () async {
+        final viewUpdater = context.read<ViewUpdater>();
+
+        if (viewUpdater.state.pwmState == PwmState.ready) {
+          viewUpdater.startPwm(
+              testStep.electronicLoad, testStep.voltage, testStep.current);
+        } else {
+          viewUpdater.moveToNextStep();
+        }
+      };
+    case LoadTestStep testStep:
+      {
+        final state = context.watch<_CurveTestStepCubit>().state;
+        final model = context.watch<ViewUpdater>().state;
+
+        final electronicLoad = testStep.electronicLoad;
+
+        return switch (state) {
+          _CurveTestStepState.ready => () async {
+              final stateCubit = context.read<_CurveTestStepCubit>();
+              final viewUpdater = context.read<ViewUpdater>();
+
+              if (testStep.currentCurve != null) {
+                stateCubit.startCurrentRamp();
+                await viewUpdater.currentCurve(
+                  electronicLoad,
+                  testStep.currentCurve!.target,
+                  testStep.currentCurve!.step,
+                  testStep.currentCurve!.period,
+                );
+              }
+              if (testStep.voltageCurve != null) {
+                stateCubit.startVoltageRamp();
+                await viewUpdater.voltageCurve(
+                  electronicLoad,
+                  testStep.voltageCurve!.target,
+                  testStep.voltageCurve!.step,
+                  testStep.voltageCurve!.period,
+                );
+              }
+
+              stateCubit.rampDone();
+            },
+          _CurveTestStepState.done => model.canProceed()
+              ? () async {
+                  final viewUpdater = context.read<ViewUpdater>();
+                  final stateCubit = context.read<_CurveTestStepCubit>();
+
+                  await viewUpdater.moveToNextStep();
+                  stateCubit.resetStep();
+                }
+              : null,
+          _ => null,
+        };
+      }
+    case DescriptiveTestStep _:
+      return () => context.read<ViewUpdater>().moveToNextStep();
+    case FinalTestStep _:
+      return null;
   }
 }
