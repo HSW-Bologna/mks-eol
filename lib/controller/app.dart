@@ -5,6 +5,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:flutter/material.dart';
 import 'package:mks_eol/controller/view_updater.dart';
 import 'package:mks_eol/model/model.dart';
+import 'package:mks_eol/services/logger.dart';
 import 'package:mks_eol/view/home_page.dart';
 import 'package:mks_eol/view/test_sequence_page.dart';
 import 'package:mks_eol/view/theme.dart';
@@ -21,7 +22,9 @@ class App extends StatelessWidget {
       home: BlocProvider(
         create: (_) {
           final cubit = ViewUpdater();
-          cubit.loadTestConfiguration().then((_) => cubit.findPorts());
+          cubit.loadTestConfiguration().then((_) {
+            cubit.findPorts();
+          });
 
           Timer.periodic(const Duration(seconds: 1), (_) {
             cubit.updateState();
@@ -31,7 +34,7 @@ class App extends StatelessWidget {
         child: Builder(builder: (context) {
           final model = context.watch<ViewUpdater>().state;
 
-          if (model.isConnected()) {
+          if (model.isConnected() && model.isConfigured()) {
             return const TestSequencePage();
           } else {
             return const HomePage();

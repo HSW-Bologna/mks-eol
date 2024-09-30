@@ -62,10 +62,11 @@ class ViewUpdater extends Cubit<Model> {
           .state
           .updateTestSteps(jsonSteps.map(testStepFromJson).nonNulls.toList())
           .copyWith(reportsPath: reportsPath));
+      logger.i("Correct JSON");
     } catch (e, s) {
       this.emit(this.state.copyWith(
           testSteps: Optional.of(Failure("Configurazione non valida!"))));
-      logger.w("Invalid json!", error: e, stackTrace: s);
+      logger.w("Total json invalid!", error: e, stackTrace: s);
     }
   }
 
@@ -163,7 +164,9 @@ class ViewUpdater extends Cubit<Model> {
             final executable = arguments.first;
             arguments.removeAt(0);
 
-            await Process.run(executable, arguments, runInShell: true);
+            final result =
+                await Process.run(executable, arguments, runInShell: true);
+            logger.i(result);
           } catch (e, s) {
             logger.w("Unable to run command", error: e, stackTrace: s);
           }
@@ -277,7 +280,11 @@ class ViewUpdater extends Cubit<Model> {
           final executable = arguments.first;
           arguments.removeAt(0);
 
-          await Process.run(executable, arguments, runInShell: true);
+          Process.run(executable, arguments, runInShell: true).then((result) {
+            logger.i(result.exitCode);
+            logger.i(result.stdout);
+            logger.i(result.stderr);
+          });
         } catch (e, s) {
           logger.w("Unable to run command", error: e, stackTrace: s);
         }
@@ -558,23 +565,18 @@ TestStep? testStepFromJson(dynamic json) {
             final int? seconds = (cast<num?>(jsonMap[_jsonDelay]))?.toInt();
             final String? title = cast<String>(jsonMap[_jsonTitle]);
             final String? description = cast<String>(jsonMap[_jsonDescription]);
-            final String? image = cast<String>(jsonMap[_jsonImages]);
             final String? command = cast<String>(jsonMap[_jsonCommand]);
 
             final Duration? delay =
                 seconds != null ? Duration(seconds: seconds) : null;
 
-            if (description != null || image != null) {
-              return DescriptiveTestStep(
-                title ?? "",
-                description ?? "",
-                imagePaths: imagesFromJson(jsonMap[_jsonImages]),
-                delay: delay,
-                command: command,
-              );
-            } else {
-              return null;
-            }
+            return DescriptiveTestStep(
+              title ?? "",
+              description ?? "",
+              imagePaths: imagesFromJson(jsonMap[_jsonImages]),
+              delay: delay,
+              command: command,
+            );
           }
         case _jsonTargetPwm:
           {
@@ -589,6 +591,7 @@ TestStep? testStepFromJson(dynamic json) {
               electronicLoad: electronicLoad,
               title: title ?? "",
               description: description ?? "",
+              imagePaths: imagesFromJson(jsonMap[_jsonImages]),
               voltage: voltage,
               current: current,
             );
@@ -600,7 +603,7 @@ TestStep? testStepFromJson(dynamic json) {
       return null;
     }
   } catch (e, s) {
-    logger.w("Invalid json!", error: e, stackTrace: s);
+    logger.w("Invalid json step!", error: e, stackTrace: s);
     return null;
   }
 }

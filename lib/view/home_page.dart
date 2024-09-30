@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:mks_eol/controller/view_updater.dart';
 import 'package:mks_eol/model/model.dart';
+import 'package:mks_eol/services/logger.dart';
 
 typedef _PageState = ({
   TextEditingController holdingRegisterValueController,

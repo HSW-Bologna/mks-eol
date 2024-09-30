@@ -301,7 +301,9 @@ class _PwmTestStepView extends StatelessWidget {
                       : this.testStep.description,
                   textAlign: TextAlign.center)),
         ])),
-        const SizedBox(height: 32),
+        if (this.testStep.imagePaths.isNotEmpty)
+          Expanded(flex: 1, child: _imageWrap(this.testStep.imagePaths)),
+        if (!this.testStep.imagePaths.isNotEmpty) const SizedBox(height: 32),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [

@@ -82,6 +82,7 @@ class PwmTestStep extends TestStep {
   final String title;
   final String description;
   final ElectronicLoad electronicLoad;
+  final List<String> imagePaths;
   final double voltage;
   final double current;
 
@@ -91,6 +92,7 @@ class PwmTestStep extends TestStep {
     required this.electronicLoad,
     required this.voltage,
     required this.current,
+    required this.imagePaths,
   });
 }
 
@@ -358,6 +360,7 @@ extension Impl on Model {
 
   bool isThereAConfigurationError() =>
       this.testSteps.isPresent && this.testSteps.value.isFailure;
+      
 
   bool canProceed() {
     final testStep = this.getTestStep();
