@@ -166,17 +166,26 @@ class ViewUpdater extends Cubit<Model> {
 
       {
         final testStep = this.state.getTestStep();
-        if (testStep is DescriptiveTestStep && testStep.command != null) {
-          try {
-            var arguments = testStep.command!.split(" ");
-            final executable = arguments.first;
-            arguments.removeAt(0);
+        if (testStep != null) {
+          if (testStep is DescriptiveTestStep) {
+            if (testStep.command != null) {
+              try {
+                var arguments = testStep.command!.split(" ");
+                final executable = arguments.first;
+                arguments.removeAt(0);
 
-            final result =
-                await Process.run(executable, arguments, runInShell: true);
-            logger.i(result);
-          } catch (e, s) {
-            logger.w("Unable to run command", error: e, stackTrace: s);
+                final result =
+                    await Process.run(executable, arguments, runInShell: true);
+                logger.i(result);
+              } catch (e, s) {
+                logger.w("Unable to run command", error: e, stackTrace: s);
+              }
+            }
+
+            if (testStep.delay != null) {
+              logger.i("Delay, initial lockdown");
+              await this.lockDown();
+            }
           }
         }
       }
@@ -184,6 +193,9 @@ class ViewUpdater extends Cubit<Model> {
   }
 
   void updateState() async {
+    this.emit(this.state.updateOperatorWaitTime());
+    return;
+
     if (this.state.isConnected()) {
       for (final load in ElectronicLoad.values) {
         final port = this.state.getElectronicLoadPort(load)!;
@@ -207,7 +219,6 @@ class ViewUpdater extends Cubit<Model> {
         }
       }
     }
-    this.emit(this.state.updateOperatorWaitTime());
   }
 
   Future<bool> saveTestData(String deviceId) async {
@@ -264,17 +275,21 @@ class ViewUpdater extends Cubit<Model> {
 
     this._stopPwm();
 
-    if (testStep != null &&
-            (testStep is LoadTestStep && testStep.zeroWhenFinished) ||
-        (testStep is PwmTestStep)) {
-      for (final load in ElectronicLoad.values) {
-        final port = this.state.getElectronicLoadPort(load)!;
-        await this._dcInput(load, false);
-        await this.writeHoldingRegister(port, _currentAddress, 0);
-        await this.writeHoldingRegister(port, _voltageAddress, 0);
-        this.emit(this
-            .state
-            .setElectronicLoadValues(load, setCurrent: 0, setVoltage: 0));
+    if (testStep != null) {
+      if ((testStep is LoadTestStep && testStep.zeroWhenFinished) ||
+          (testStep is PwmTestStep)) {
+        for (final load in ElectronicLoad.values) {
+          final port = this.state.getElectronicLoadPort(load)!;
+          await this._dcInput(load, false);
+          await this.writeHoldingRegister(port, _currentAddress, 0);
+          await this.writeHoldingRegister(port, _voltageAddress, 0);
+          this.emit(this
+              .state
+              .setElectronicLoadValues(load, setCurrent: 0, setVoltage: 0));
+        }
+      } else if (testStep is DescriptiveTestStep && testStep.delay != null) {
+        logger.i("Delay, unlock");
+        await this.unlock();
       }
     }
 
@@ -285,19 +300,24 @@ class ViewUpdater extends Cubit<Model> {
 
     {
       final testStep = newState.getTestStep();
-      if (testStep is DescriptiveTestStep && testStep.command != null) {
-        try {
-          var arguments = testStep.command!.split(" ");
-          final executable = arguments.first;
-          arguments.removeAt(0);
+      if (testStep != null) {
+        if (testStep is DescriptiveTestStep && testStep.command != null) {
+          try {
+            var arguments = testStep.command!.split(" ");
+            final executable = arguments.first;
+            arguments.removeAt(0);
 
-          Process.run(executable, arguments, runInShell: true).then((result) {
-            logger.i(result.exitCode);
-            logger.i(result.stdout);
-            logger.i(result.stderr);
-          });
-        } catch (e, s) {
-          logger.w("Unable to run command", error: e, stackTrace: s);
+            Process.run(executable, arguments, runInShell: true).then((result) {
+              logger.i(result.exitCode);
+              logger.i(result.stdout);
+              logger.i(result.stderr);
+            });
+          } catch (e, s) {
+            logger.w("Unable to run command", error: e, stackTrace: s);
+          }
+        } else if (testStep is DescriptiveTestStep && testStep.delay != null) {
+          logger.i("Delay, lockdown");
+          await this.lockDown();
         }
       }
     }
@@ -310,6 +330,24 @@ class ViewUpdater extends Cubit<Model> {
     await this.writeCoil(this.state.getElectronicLoadPort(electronicLoad)!,
         _dcInputAddress, enable);
     this.emit(this.state.updateDcInput(electronicLoad, enable));
+  }
+
+  Future<void> lockDown() async {
+    logger.i("Lockdown");
+    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 1);
+    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 1);
+    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 1);
+    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 1);
+    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 1);
+  }
+
+  Future<void> unlock() async {
+    logger.i("Unlocking");
+    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 0);
+    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 0);
+    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 0);
+    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 0);
+    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 0);
   }
 
   Future<void> startPwm(
