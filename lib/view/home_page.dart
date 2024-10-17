@@ -118,7 +118,7 @@ Widget _statusMessage() =>
                 crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
               Text(
-                  "Ricerca dei dispositivi fallita: ${model.ports.value.failure}"),
+                  "Problema di comunicazione con i dispositivi: ${model.ports.value.failure}"),
               const SizedBox(height: 32),
               ElevatedButton(
                   onPressed: () {

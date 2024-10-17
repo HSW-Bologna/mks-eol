@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:modbus_client_serial/modbus_client_serial.dart';
+import 'package:modbus_client/modbus_client.dart';
 import 'package:optional/optional.dart';
 import 'package:result_type/result_type.dart';
 import 'package:result_type/src/result.dart';
@@ -137,13 +137,15 @@ extension MachineStateImpl on ElectronicLoadState {
 }
 
 typedef ModbusPorts = ({
-  ModbusClientSerialRtu firstElectronicLoad,
-  ModbusClientSerialRtu secondElectronicLoad,
-  ModbusClientSerialRtu pwmControl
+  ModbusClient firstElectronicLoad,
+  ModbusClient secondElectronicLoad,
+  ModbusClient pwmControl
 });
 
 typedef Model = ({
   String reportsPath,
+  String firstElectronicLoadAddress,
+  String secondElectronicLoadAddress,
   Optional<Result<ModbusPorts, String>> ports,
   ElectronicLoadState currentElectronicLoadState,
   ElectronicLoadState voltageElectronicLoadState,
@@ -160,6 +162,8 @@ typedef Model = ({
 
 final Model defaultModel = (
   reportsPath: "",
+  firstElectronicLoadAddress: "",
+  secondElectronicLoadAddress: "",
   ports: const Optional.empty(),
   currentElectronicLoadState: (
     voltage: 0,
@@ -191,6 +195,8 @@ final Model defaultModel = (
 extension Impl on Model {
   Model copyWith({
     String? reportsPath,
+    String? firstElectronicLoadAddress,
+    String? secondElectronicLoadAddress,
     Optional<Result<ModbusPorts, String>>? ports,
     ElectronicLoadState? currentElectronicLoadState,
     ElectronicLoadState? voltageElectronicLoadState,
@@ -206,6 +212,10 @@ extension Impl on Model {
   }) =>
       (
         reportsPath: reportsPath ?? this.reportsPath,
+        firstElectronicLoadAddress:
+            firstElectronicLoadAddress ?? this.firstElectronicLoadAddress,
+        secondElectronicLoadAddress:
+            secondElectronicLoadAddress ?? this.secondElectronicLoadAddress,
         ports: ports ?? this.ports,
         currentElectronicLoadState:
             currentElectronicLoadState ?? this.currentElectronicLoadState,
@@ -340,7 +350,7 @@ extension Impl on Model {
     }
   }
 
-  ModbusClientSerialRtu? getElectronicLoadPort(ElectronicLoad electronicLoad) {
+  ModbusClient? getElectronicLoadPort(ElectronicLoad electronicLoad) {
     if (this.ports.isPresent && this.ports.value.isSuccess) {
       return switch (electronicLoad) {
         ElectronicLoad.current => this.ports.value.success.firstElectronicLoad,
@@ -351,7 +361,7 @@ extension Impl on Model {
     }
   }
 
-  ModbusClientSerialRtu? getPwmControlPort() {
+  ModbusClient? getPwmControlPort() {
     if (this.ports.isPresent && this.ports.value.isSuccess) {
       return this.ports.value.success.pwmControl;
     } else {

@@ -1,4 +1,6 @@
 {
+    "firstLoadIp": "127.0.0.1",
+    "secondLoadIp": "127.0.0.1",
     "reportsPath":"report-collaudo.csv",
     "steps": [
         {

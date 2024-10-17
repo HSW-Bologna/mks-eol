@@ -11,6 +11,7 @@ import 'package:mks_eol/model/model.dart' as model;
 import 'package:mks_eol/services/logger.dart';
 import 'package:modbus_client/modbus_client.dart';
 import 'package:modbus_client_serial/modbus_client_serial.dart';
+import 'package:modbus_client_tcp/modbus_client_tcp.dart';
 import 'package:optional/optional.dart';
 import 'package:result_type/result_type.dart';
 
@@ -26,6 +27,8 @@ const String _jsonSteps = "steps";
 const String _jsonTarget = "target";
 const String _jsonTargetOperator = "operator";
 const String _jsonTargetLoad = "load";
+const String _jsonFirstLoadIp = "firstLoadIp";
+const String _jsonSecondLoadIp = "secondLoadIp";
 const String _jsonTargetPwm = "pwm";
 const String _jsonManualCheck = "manualCheck";
 const String _jsonSkippable = "skippable";
@@ -58,11 +61,17 @@ class ViewUpdater extends Cubit<Model> {
       final jsonContent = jsonDecode(await file.readAsString());
       final List<dynamic> jsonSteps = jsonContent[_jsonSteps] as List<dynamic>;
       final reportsPath = cast<String?>(jsonContent[_jsonReportsPath]) ?? "";
+      final firstLoadIp = cast<String?>(jsonContent[_jsonFirstLoadIp]) ?? "";
+      final secondLoadIp = cast<String?>(jsonContent[_jsonSecondLoadIp]) ?? "";
 
       this.emit(this
           .state
           .updateTestSteps(jsonSteps.map(testStepFromJson).nonNulls.toList())
-          .copyWith(reportsPath: reportsPath));
+          .copyWith(
+            reportsPath: reportsPath,
+            firstElectronicLoadAddress: firstLoadIp,
+            secondElectronicLoadAddress: secondLoadIp,
+          ));
       logger.i("Correct JSON");
     } catch (e, s) {
       this.emit(this.state.copyWith(
@@ -74,122 +83,119 @@ class ViewUpdater extends Cubit<Model> {
   Future<void> findPorts() async {
     final ports = SerialPort.availablePorts;
 
-    ModbusClientSerialRtu? firstPort = null;
-    ModbusClientSerialRtu? secondPort = null;
-    ModbusClientSerialRtu? thirdPort = null;
+    ModbusClient? firstPort = null;
+    ModbusClient? secondPort = null;
+    ModbusClient? thirdPort = null;
 
     this.emit(this.state.copyWith(ports: const Optional.empty()));
 
     for (final port in ports) {
       logger.i("Trying port ${port}");
 
-      for (int address = 0; address <= 1; address++) {
-        try {
-          final client = ModbusClientSerialRtu(
-            portName: port,
-            connectionMode: ModbusConnectionMode.autoConnectAndDisconnect,
-            dataBits: SerialDataBits.bits8,
-            stopBits: SerialStopBits.one,
-            parity: SerialParity.none,
-            baudRate: SerialBaudRate.b115200,
-            flowControl: SerialFlowControl.none,
-            unitId: address,
-            responseTimeout: const Duration(milliseconds: 2000),
-          );
+      try {
+        final client = ModbusClientSerialRtu(
+          portName: port,
+          connectionMode: ModbusConnectionMode.autoConnectAndDisconnect,
+          dataBits: SerialDataBits.bits8,
+          stopBits: SerialStopBits.one,
+          parity: SerialParity.none,
+          baudRate: SerialBaudRate.b115200,
+          flowControl: SerialFlowControl.none,
+          unitId: 1,
+          responseTimeout: const Duration(milliseconds: 2000),
+        );
 
-/*
-          firstPort = client;
-          secondPort = client;
+        final int deviceType = await this._readHoldingRegister(
+            client, _deviceClassAddress,
+            handleError: false);
+        logger.i("Device type found ${deviceType}");
+
+        if (deviceType == 0xBEAF) {
+          /*
+          case 59:
+            firstPort = client;
+            break;
+          case 33:
+            secondPort = client;
+            break;
+            */
           thirdPort = client;
           break;
-          */
-
-          final int deviceType =
-              await this._readHoldingRegister(client, _deviceClassAddress);
-          logger.i("Device type found ${deviceType}");
-
-          switch (deviceType) {
-            case 59:
-              firstPort = client;
-              break;
-            case 33:
-              secondPort = client;
-              break;
-            case 0xBEAF:
-              thirdPort = client;
-              break;
-          }
-
-          if (deviceType != 0) {
-            break;
-          }
-        } catch (e, s) {
-          logger.i("Unable to open port ${port}", error: e, stackTrace: s);
         }
+        thirdPort = client;
+      } catch (e, s) {
+        logger.i("Unable to open port ${port}", error: e, stackTrace: s);
       }
     }
 
-    logger.i("Done ${firstPort} ${secondPort}");
+    logger.i("Done serial ${firstPort} ${secondPort} ${thirdPort}");
 
     if (ports.isEmpty) {
       this.emit(this
           .state
           .copyWith(ports: Optional.of(Failure("Nessuna porta disponibile"))));
-    } else if (firstPort == null) {
-      this.emit(this.state.copyWith(
-          ports: Optional.of(Failure("Primo carico elettronico non trovato"))));
-    } else if (secondPort == null) {
-      this.emit(this.state.copyWith(
-          ports:
-              Optional.of(Failure("Secondo carico elettronico non trovato"))));
     } else if (thirdPort == null) {
       this.emit(this
           .state
           .copyWith(ports: Optional.of(Failure("Controllo PWM non trovato"))));
     } else {
-      this.emit(this.state.copyWith(
-              ports: Optional.of(Success((
-            firstElectronicLoad: firstPort,
-            secondElectronicLoad: secondPort,
-            pwmControl: thirdPort,
-          )))));
-      logger.i(
-          "Successfully connected to ${firstPort.serialPort.name} / ${secondPort.serialPort.name} / ${thirdPort.serialPort.name}");
-
-      for (final load in ElectronicLoad.values) {
-        final port = this.state.getElectronicLoadPort(load)!;
-        await this.writeCoil(port, _remoteModeAddress, true);
-        await this._dcInput(load, false);
-        await this.writeHoldingRegister(port, _currentAddress, 0);
-        await this.writeHoldingRegister(port, _voltageAddress, 0);
+      final firstAddress =
+          InternetAddress.tryParse(this.state.firstElectronicLoadAddress);
+      if (firstAddress == null) {
+        this.emit(this.state.copyWith(
+            ports: Optional.of(Failure(
+                "Indirizzo IP del primo carico (${this.state.firstElectronicLoadAddress}) non valido"))));
+      } else {
+        final serverIp = await ModbusClientTcp.discover(firstAddress.address);
+        if (serverIp == null) {
+          this.emit(this.state.copyWith(
+              ports: Optional.of(
+                  Failure("Impossibile connettersi al primo carico"))));
+        } else {
+          // Create the modbus client.
+          firstPort = ModbusClientTcp(serverIp, unitId: 1);
+        }
       }
 
-      this._enterTest(this.state.getTestStep());
-      /*{
-        final testStep = this.state.getTestStep();
-        if (testStep != null) {
-          if (testStep is DescriptiveTestStep) {
-            if (testStep.command != null) {
-              try {
-                var arguments = testStep.command!.split(" ");
-                final executable = arguments.first;
-                arguments.removeAt(0);
-
-                final result =
-                    await Process.run(executable, arguments, runInShell: true);
-                logger.i(result);
-              } catch (e, s) {
-                logger.w("Unable to run command", error: e, stackTrace: s);
-              }
-            }
-
-            if (testStep.delay != null) {
-              logger.i("Delay, initial lockdown");
-              await this.lockDown();
-            }
-          }
+      final secondAddress =
+          InternetAddress.tryParse(this.state.secondElectronicLoadAddress);
+      if (secondAddress == null) {
+        this.emit(this.state.copyWith(
+            ports: Optional.of(Failure(
+                "Indirizzo IP del secondo carico (${this.state.secondElectronicLoadAddress}) non valido"))));
+      } else {
+        final serverIp = await ModbusClientTcp.discover(secondAddress.address);
+        if (serverIp == null) {
+          this.emit(this.state.copyWith(
+              ports: Optional.of(
+                  Failure("Impossibile connettersi al secondo carico"))));
+        } else {
+          // Create the modbus client.
+          secondPort = ModbusClientTcp(serverIp, unitId: 1);
         }
-      }*/
+      }
+
+      logger.i("Done TCP ${firstPort} ${secondPort} ${thirdPort}");
+
+      if (firstPort != null && secondPort != null) {
+        this.emit(this.state.copyWith(
+                ports: Optional.of(Success((
+              firstElectronicLoad: firstPort,
+              secondElectronicLoad: secondPort,
+              pwmControl: thirdPort,
+            )))));
+        logger.i("Successfully connected to all ports");
+
+        for (final load in ElectronicLoad.values) {
+          final port = this.state.getElectronicLoadPort(load)!;
+          await this.writeCoil(port, _remoteModeAddress, true);
+          await this._dcInput(load, false);
+          await this.writeHoldingRegister(port, _currentAddress, 0);
+          await this.writeHoldingRegister(port, _voltageAddress, 0);
+        }
+
+        this._enterTest(this.state.getTestStep());
+      }
     }
   }
 
@@ -277,29 +283,6 @@ class ViewUpdater extends Cubit<Model> {
     }
 
     this._exitTest(this.state.getTestStep());
-/*
-    final testStep = this.state.getTestStep();
-
-    this._stopPwm();
-
-    if (testStep != null) {
-      if ((testStep is LoadTestStep && testStep.zeroWhenFinished) ||
-          (testStep is PwmTestStep)) {
-        for (final load in ElectronicLoad.values) {
-          final port = this.state.getElectronicLoadPort(load)!;
-          await this._dcInput(load, false);
-          await this.writeHoldingRegister(port, _currentAddress, 0);
-          await this.writeHoldingRegister(port, _voltageAddress, 0);
-          this.emit(this
-              .state
-              .setElectronicLoadValues(load, setCurrent: 0, setVoltage: 0));
-        }
-      } else if (testStep is DescriptiveTestStep && testStep.delay != null) {
-        logger.i("Delay, unlock");
-        await this.unlock();
-      }
-    }
-    */
 
     var newState = this
         .state
@@ -307,29 +290,6 @@ class ViewUpdater extends Cubit<Model> {
         .moveToNextStep(skip: skip);
 
     this._enterTest(newState.getTestStep());
-    /*{
-      final testStep = newState.getTestStep();
-      if (testStep != null) {
-        if (testStep is DescriptiveTestStep && testStep.command != null) {
-          try {
-            var arguments = testStep.command!.split(" ");
-            final executable = arguments.first;
-            arguments.removeAt(0);
-
-            Process.run(executable, arguments, runInShell: true).then((result) {
-              logger.i(result.exitCode);
-              logger.i(result.stdout);
-              logger.i(result.stderr);
-            });
-          } catch (e, s) {
-            logger.w("Unable to run command", error: e, stackTrace: s);
-          }
-        } else if (testStep is DescriptiveTestStep && testStep.delay != null) {
-          logger.i("Delay, lockdown");
-          await this.lockDown();
-        }
-      }
-    }*/
 
     this.emit(newState);
   }
@@ -427,7 +387,11 @@ class ViewUpdater extends Cubit<Model> {
   }
 
   Future<List<int>> _readHoldingRegisters(
-      ModbusClientSerialRtu client, int address, int number) async {
+    ModbusClient client,
+    int address,
+    int number, {
+    bool handleError = true,
+  }) async {
     Uint8List bytes = Uint8List(number * 2);
 
     final register = ModbusBytesRegister(
@@ -437,11 +401,15 @@ class ViewUpdater extends Cubit<Model> {
       byteCount: number * 2,
     );
 
-    this._handleModbusResult(
-        () async => await client.send(
-              register.getReadRequest(),
-            ),
-        client.serialPort.name);
+    if (handleError) {
+      this._handleModbusResult(
+          () async => await client.send(
+                register.getReadRequest(),
+              ),
+          getPortName(client));
+    } else {
+      await client.send(register.getReadRequest());
+    }
 
     bytes = register.value ?? bytes;
 
@@ -451,13 +419,16 @@ class ViewUpdater extends Cubit<Model> {
   }
 
   Future<int> _readHoldingRegister(
-          ModbusClientSerialRtu client, int address) async =>
-      (await this._readHoldingRegisters(client, address, 1))
+    ModbusClient client,
+    int address, {
+    bool handleError = true,
+  }) async =>
+      (await this._readHoldingRegisters(client, address, 1,
+              handleError: handleError))
           .elementAtOrNull(0) ??
       0;
 
-  Future<void> writeCoil(
-      ModbusClientSerialRtu client, int address, bool value) async {
+  Future<void> writeCoil(ModbusClient client, int address, bool value) async {
     this._handleModbusResult(
         () async => await client.send(
               ModbusUint16Register(
@@ -466,11 +437,11 @@ class ViewUpdater extends Cubit<Model> {
                 address: address,
               ).getWriteRequest(value ? 0xFF00 : 0x0000),
             ),
-        client.serialPort.name);
+        getPortName(client));
   }
 
   Future<void> writeHoldingRegister(
-      ModbusClientSerialRtu client, int address, int value) async {
+      ModbusClient client, int address, int value) async {
     this._handleModbusResult(
         () async => await client.send(
               ModbusUint16Register(
@@ -479,7 +450,7 @@ class ViewUpdater extends Cubit<Model> {
                 address: address,
               ).getWriteRequest(value),
             ),
-        client.serialPort.name);
+        getPortName(client));
   }
 
   Future<void> _curve({
@@ -493,7 +464,8 @@ class ViewUpdater extends Cubit<Model> {
     required double maxY,
   }) async {
     final port = this.state.getElectronicLoadPort(electronicLoad);
-    logger.i("Curving ${address} on port ${port?.serialPort.name}");
+    logger.i(
+        "Curving ${address} on port ${port != null ? getPortName(port) : "Nessuna"}");
     if (port == null) {
       return;
     }
@@ -516,7 +488,7 @@ class ViewUpdater extends Cubit<Model> {
     }
   }
 
-  Future<void> _setCurrent(ModbusClientSerialRtu port, double current) async {
+  Future<void> _setCurrent(ModbusClient port, double current) async {
     final int value = (((current * 10) * 0xD0E5) / (40.8 * 10)).floor();
     await this.writeHoldingRegister(port, _currentAddress, value);
   }
@@ -744,3 +716,13 @@ TestStep? testStepFromJson(dynamic json) {
 }
 
 T? cast<T>(dynamic value) => value is T ? value : null;
+
+String getPortName(ModbusClient client) {
+  if (client is ModbusClientSerialRtu) {
+    return client.serialPort.name;
+  } else if (client is ModbusClientTcp) {
+    return client.serverAddress;
+  } else {
+    return "<UNK>";
+  }
+}
