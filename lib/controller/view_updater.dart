@@ -97,12 +97,12 @@ class ViewUpdater extends Cubit<Model> {
             responseTimeout: const Duration(milliseconds: 2000),
           );
 
-          /*
-              firstPort = client;
-              secondPort = client;
-              thirdPort = client;
-              break;
-              */
+/*
+          firstPort = client;
+          secondPort = client;
+          thirdPort = client;
+          break;
+          */
 
           final int deviceType =
               await this._readHoldingRegister(client, _deviceClassAddress);
@@ -164,7 +164,8 @@ class ViewUpdater extends Cubit<Model> {
         await this.writeHoldingRegister(port, _voltageAddress, 0);
       }
 
-      {
+      this._enterTest(this.state.getTestStep());
+      /*{
         final testStep = this.state.getTestStep();
         if (testStep != null) {
           if (testStep is DescriptiveTestStep) {
@@ -188,13 +189,12 @@ class ViewUpdater extends Cubit<Model> {
             }
           }
         }
-      }
+      }*/
     }
   }
 
   void updateState() async {
     this.emit(this.state.updateOperatorWaitTime());
-    return;
 
     if (this.state.isConnected()) {
       for (final load in ElectronicLoad.values) {
@@ -254,16 +254,21 @@ class ViewUpdater extends Cubit<Model> {
       this.emit(this.state.copyWith(differenceValue: value));
 
   Future<void> abortTest() async {
+    var state = this.state;
+
+    this._exitTest(this.state.getTestStep());
+
+/*
     for (final load in ElectronicLoad.values) {
       final port = this.state.getElectronicLoadPort(load)!;
       await this._dcInput(load, false);
       await this.writeHoldingRegister(port, _currentAddress, 0);
       await this.writeHoldingRegister(port, _voltageAddress, 0);
-      this.emit(this
-          .state
-          .setElectronicLoadValues(load, setCurrent: 0, setVoltage: 0));
+      state = state.setElectronicLoadValues(load, setCurrent: 0, setVoltage: 0);
     }
-    this.emit(this.state.copyWith(testIndex: 0));
+    */
+
+    this.emit(state.copyWith(testIndex: 0, testData: []));
   }
 
   Future<void> moveToNextStep({bool skip = false}) async {
@@ -271,6 +276,8 @@ class ViewUpdater extends Cubit<Model> {
       return;
     }
 
+    this._exitTest(this.state.getTestStep());
+/*
     final testStep = this.state.getTestStep();
 
     this._stopPwm();
@@ -292,13 +299,15 @@ class ViewUpdater extends Cubit<Model> {
         await this.unlock();
       }
     }
+    */
 
     var newState = this
         .state
         .copyWith(pwmState: PwmState.ready)
         .moveToNextStep(skip: skip);
 
-    {
+    this._enterTest(newState.getTestStep());
+    /*{
       final testStep = newState.getTestStep();
       if (testStep != null) {
         if (testStep is DescriptiveTestStep && testStep.command != null) {
@@ -320,10 +329,21 @@ class ViewUpdater extends Cubit<Model> {
           await this.lockDown();
         }
       }
-    }
+    }*/
 
     this.emit(newState);
   }
+
+  void startCurrentRamp() => this.emit(
+      this.state.copyWith(curveTestStepState: CurveTestStepState.currentRamp));
+
+  void startVoltageRamp() => this.emit(
+      this.state.copyWith(curveTestStepState: CurveTestStepState.voltageRamp));
+
+  void rampDone() => this
+      .emit(this.state.copyWith(curveTestStepState: CurveTestStepState.done));
+
+  void resetStep() => this.emit(this.state.resetStep());
 
   Future<void> _dcInput(ElectronicLoad electronicLoad, bool enable) async {
     logger.i("About to turn ${enable ? 'on' : 'off'} dcInput");
@@ -334,20 +354,14 @@ class ViewUpdater extends Cubit<Model> {
 
   Future<void> lockDown() async {
     logger.i("Lockdown");
-    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 1);
-    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 1);
-    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 1);
-    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 1);
-    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 1);
+    final port = this.state.getPwmControlPort()!;
+    await this.writeHoldingRegister(port, 2, 1);
   }
 
   Future<void> unlock() async {
     logger.i("Unlocking");
-    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 0);
-    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 0);
-    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 0);
-    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 0);
-    await this.writeHoldingRegister(this.state.getPwmControlPort()!, 2, 0);
+    final port = this.state.getPwmControlPort()!;
+    await this.writeHoldingRegister(port, 2, 0);
   }
 
   Future<void> startPwm(
@@ -374,6 +388,8 @@ class ViewUpdater extends Cubit<Model> {
 
   Future<void> currentCurve(ElectronicLoad electronicLoad, double amperes,
       double amperesStep, double stepPeriod) async {
+    this.startCurrentRamp();
+
     final state = this.state.getElectronicLoadState(electronicLoad);
 
     await this._curve(
@@ -388,10 +404,12 @@ class ViewUpdater extends Cubit<Model> {
     this.emit(this
         .state
         .setElectronicLoadValues(electronicLoad, setCurrent: amperes));
+    this.rampDone();
   }
 
   Future<void> voltageCurve(ElectronicLoad electronicLoad, double volts,
       double voltsStep, double stepPeriod) async {
+    this.startVoltageRamp();
     final state = this.state.getElectronicLoadState(electronicLoad);
 
     await this._curve(
@@ -405,17 +423,7 @@ class ViewUpdater extends Cubit<Model> {
         maxY: 1020);
     this.emit(
         this.state.setElectronicLoadValues(electronicLoad, setVoltage: volts));
-  }
-
-  Future<void> stopCurrentTest() async {
-    for (final load in ElectronicLoad.values) {
-      await this._dcInput(load, false);
-      final port = this.state.getElectronicLoadPort(load)!;
-
-      await this.writeHoldingRegister(port, _currentAddress, 0);
-      await this.writeHoldingRegister(port, _voltageAddress, 0);
-    }
-    this.moveToNextStep();
+    this.rampDone();
   }
 
   Future<List<int>> _readHoldingRegisters(
@@ -429,9 +437,11 @@ class ViewUpdater extends Cubit<Model> {
       byteCount: number * 2,
     );
 
-    await client.send(
-      register.getReadRequest(),
-    );
+    this._handleModbusResult(
+        () async => await client.send(
+              register.getReadRequest(),
+            ),
+        client.serialPort.name);
 
     bytes = register.value ?? bytes;
 
@@ -446,40 +456,30 @@ class ViewUpdater extends Cubit<Model> {
           .elementAtOrNull(0) ??
       0;
 
-  Future<bool> readCoil(ModbusClientSerialRtu client, int address) async {
-    final register = ModbusUint16Register(
-      name: "register",
-      type: ModbusElementType.coil,
-      address: address,
-    );
-
-    await client.send(
-      register.getReadRequest(),
-    );
-
-    return (register.value as bool?) ?? false;
-  }
-
   Future<void> writeCoil(
       ModbusClientSerialRtu client, int address, bool value) async {
-    await client.send(
-      ModbusUint16Register(
-        name: "register",
-        type: ModbusElementType.coil,
-        address: address,
-      ).getWriteRequest(value ? 0xFF00 : 0x0000),
-    );
+    this._handleModbusResult(
+        () async => await client.send(
+              ModbusUint16Register(
+                name: "register",
+                type: ModbusElementType.coil,
+                address: address,
+              ).getWriteRequest(value ? 0xFF00 : 0x0000),
+            ),
+        client.serialPort.name);
   }
 
   Future<void> writeHoldingRegister(
       ModbusClientSerialRtu client, int address, int value) async {
-    await client.send(
-      ModbusUint16Register(
-        name: "register",
-        type: ModbusElementType.holdingRegister,
-        address: address,
-      ).getWriteRequest(value),
-    );
+    this._handleModbusResult(
+        () async => await client.send(
+              ModbusUint16Register(
+                name: "register",
+                type: ModbusElementType.holdingRegister,
+                address: address,
+              ).getWriteRequest(value),
+            ),
+        client.serialPort.name);
   }
 
   Future<void> _curve({
@@ -519,6 +519,90 @@ class ViewUpdater extends Cubit<Model> {
   Future<void> _setCurrent(ModbusClientSerialRtu port, double current) async {
     final int value = (((current * 10) * 0xD0E5) / (40.8 * 10)).floor();
     await this.writeHoldingRegister(port, _currentAddress, value);
+  }
+
+  Future<void> _enterTest(TestStep? testStep) async {
+    this.resetStep();
+    if (testStep != null) {
+      if (testStep is DescriptiveTestStep && testStep.command != null) {
+        try {
+          var arguments = testStep.command!.split(" ");
+          final executable = arguments.first;
+          arguments.removeAt(0);
+
+          Process.run(executable, arguments, runInShell: true).then((result) {
+            logger.i(result.exitCode);
+            logger.i(result.stdout);
+            logger.i(result.stderr);
+          });
+        } catch (e, s) {
+          logger.w("Unable to run command", error: e, stackTrace: s);
+        }
+      } else if (testStep is DescriptiveTestStep && testStep.delay != null) {
+        logger.i("Delay, lockdown");
+        await this.lockDown();
+      }
+    }
+  }
+
+  Future<void> _handleModbusResult(
+      Future<ModbusResponseCode> Function() op, String port) async {
+    var counter = 0;
+    var code = await op();
+    while (counter < 3) {
+      if (code == ModbusResponseCode.requestSucceed ||
+          code == ModbusResponseCode.acknowledge) {
+        break;
+      } else {
+        code = await op();
+      }
+      counter++;
+    }
+
+    if (code != ModbusResponseCode.requestSucceed &&
+        code != ModbusResponseCode.acknowledge) {
+      this.emit(this.state.copyWith(
+              ports: Optional.of(Failure(switch (code) {
+            ModbusResponseCode.connectionFailed =>
+              "Impossibile connettersi a ${port}",
+            ModbusResponseCode.deviceBusy => "${port} occupata",
+            ModbusResponseCode.requestTimeout => "Nessuna risposta da ${port}",
+            ModbusResponseCode.deviceFailure =>
+              "Errore sul dispositivo connesso a ${port}",
+            ModbusResponseCode.illegalDataAddress =>
+              "Indirizzo dati non valido su ${port}",
+            ModbusResponseCode.illegalDataValue =>
+              "Valore dati non valido su ${port}",
+            ModbusResponseCode.illegalFunction =>
+              "Funzione non valida su ${port}",
+            ModbusResponseCode.negativeAcknowledgment =>
+              "Il dispositivo su ${port} si rifiuta di rispondere",
+            _ => "Errore di comunicazione (${code}) verso ${port}!",
+          }))));
+    }
+  }
+
+  Future<void> _exitTest(TestStep? testStep) async {
+    this.resetStep();
+    this._stopPwm();
+
+    if (testStep != null) {
+      if ((testStep is LoadTestStep && testStep.zeroWhenFinished) ||
+          (testStep is PwmTestStep)) {
+        for (final load in ElectronicLoad.values) {
+          final port = this.state.getElectronicLoadPort(load)!;
+          await this._dcInput(load, false);
+          await this.writeHoldingRegister(port, _currentAddress, 0);
+          await this.writeHoldingRegister(port, _voltageAddress, 0);
+          this.emit(this
+              .state
+              .setElectronicLoadValues(load, setCurrent: 0, setVoltage: 0));
+        }
+      } else if (testStep is DescriptiveTestStep && testStep.delay != null) {
+        logger.i("Delay, unlock");
+        await this.unlock();
+      }
+    }
   }
 }
 

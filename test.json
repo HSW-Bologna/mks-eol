@@ -1,50 +1,16 @@
 {
-    "reportsPath": "reports.csv",
+    "reportsPath":"report-collaudo.csv",
     "steps": [
-        {
-            "target": "operator",
-            "title": "Echo banana",
-            "command": "echo banana >> /tmp/roba.txt"
-        },
-        {
-            "target": "operator",
-            "title": "Echo zuppa",
-            "command": "echo zuppa >> /tmp/roba.txt"
-        },
-        {
-            "target": "load",
-            "electronicLoad": 0,
-            "title": "Test a bassa tensione",
-            "description": "Verifica carico a bassa tensione",
-            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 180 Watt",
-            "current": {
-                "target": 2.0,
-                "step": 0.5,
-                "period": 0.2
-            },
-            "manualCheck": {
-                "maxVariance": 1.5,
-                "targetValue": 10,
-                "maxDifference": 2
-            }
-        },
-        {
-            "target": "pwm",
-            "title": "Test PWM",
-            "description": "Test PWM in corso",
-            "electronicLoad": 1,
-            "voltage": 24,
-            "current": 1
-        },
         {
             "target": "operator",
             "title": "Test rigidita' elettrica",
             "description": "Collegare i terminali dell'unita' test rigidita' dielettrica a J12, J13 e J14 come da immagine",
-            "images": "assets/rigidita-elettrica.jpg"
+            "images": "assets/rigidita-elettrica.jpg",
+	    "command" : "lecroy-set --mode1 > log.txt 2>&1"
         },
         {
             "target": "operator",
-            "description": "Verificare che sia selezionato il test \"HVAC Prova DC\"\nChiudere lo sportello, sganciare l'emergenza, premere il pulsante \"ripristina ausiliari\"",
+            "description": "Verificare che sia selezionato il test \"HVAC Prova DC\".\nChiudere lo sportello, sganciare l'emergenza, premere il pulsante \"ripristina ausiliari\".",
             "images": "assets/test-hvac.jpg"
         },
         {
@@ -59,12 +25,12 @@
         },
         {
             "target": "operator",
-            "description": "Premere il tasto di emergenza e aprire lo sportello.\nScollegare i cavi da J12, J13 e J14"
+            "description": "Premere il tasto di emergenza e aprire lo sportello.\nScollegare i cavi da J12, J13, J14."
         },
         {
             "target": "operator",
             "title": "Test a bassa tensione",
-            "description": "Verificare che il ponticello SPAD6 sia aperto\nCollegare i cavi di alimentazione ai terminali J12, J13 e J14\nCollegare i cavi 1114/1115 ai terminali di uscita del PFC\nCollegare le sonde\nCollegare il connettore J1 (+24V)",
+            "description": "Verificare che il ponticello SPAD6 sia aperto.\nCollegare i cavi di alimentazione ai terminali J12, J13 e J14.\nCollegare i cavi 1114/1115 ai terminali di uscita del PFC.\nCollegare le sonde.\nCollegare il connettore J1 (+24V).",
             "images": [
                 "assets/cavi-1114-1115.jpg",
                 "assets/terminali-uscita-pfc.jpg"
@@ -73,32 +39,33 @@
         {
             "target": "operator",
             "title": "Test a bassa tensione",
-            "description": "Portare il variac a 0 V ed accenderlo\nPosizionare il selettore su limite 4 A\nConfigurare l'oscilloscopio a 20 V/Div, 5 ms/Div e trigger sulla rete.\nChiudere lo sportello, sganciare l'emergenza, premere il pulsante \"ripristina ausiliari\"",
+            "description": "Portare il variac a 0 V ed accenderlo.\nPosizionare il selettore su limite 4 A\nChiudere lo sportello, sganciare l'emergenza, premere il pulsante \"ripristina ausiliari\".",
             "images": [
                 "assets/cavi-1114-1115.jpg",
                 "assets/terminali-uscita-pfc.jpg"
-            ]
+            ],
+	    "command" : "lecroy-set --mode1 > log.txt 2>&1"
         },
         {
             "target": "operator",
-            "description": "Verificare che il LED PFC sia spento sulla scheda di controllo",
+            "description": "Verificare che il LED PFC sia spento sulla scheda di controllo.",
             "images": "assets/led-pfc.jpg"
         },
         {
             "target": "operator",
-            "description": "Accendere il Variac.\nPortare la tensione del variac a 42 V e verificare che il LED PFC si accenda",
+            "description": "Accendere il Variac.\nPortare la tensione del variac a 42 V e verificare che il LED PFC si accenda.",
             "images": "assets/led-pfc.jpg"
         },
         {
             "target": "operator",
-            "description": "Verificare sull'oscilloscopio che la tensione di uscita sia 80 V"
+            "description": "Verificare sull'oscilloscopio che la tensione di uscita sia 80 V."
         },
         {
             "target": "load",
             "electronicLoad": 0,
             "title": "Test a bassa tensione",
             "description": "Verifica carico a bassa tensione",
-            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 180 Watt",
+            "finalDescription": "Immettere i valori di corrente e potenza misurati sul CA8333.\nVerificare che la potenza impegnata sia minore di 180 Watt",
             "current": {
                 "target": 2.0,
                 "step": 0.5,
@@ -106,21 +73,22 @@
             },
             "manualCheck": {
                 "maxVariance": 1.5,
-                "targetValue": 10,
-                "maxDifference": 2
-            }
+                "min": 0.90
+            },
+            "skippable" : true
         },
         {
             "target": "operator",
-            "description": "Premere il tasto di emergenza ed aprire il portello"
+            "description": "Premere il tasto di emergenza ed aprire il portello."
         },
         {
             "target": "operator",
-            "description": "Saldare il ponticello SPAD6\nConfigurare l'oscilloscopio a 200 V/Div, 5 ms/Div e trigger sulla rete"
+            "description": "Saldare il ponticello SPAD6.\n"
         },
         {
             "target": "operator",
-            "description": "Chiudere lo sportello, sganciare l'emergenza, premere il pulsante \"ripristina ausiliari\""
+            "description": "Chiudere lo sportello, sganciare l'emergenza, premere il pulsante \"ripristina ausiliari\".",
+	    "command" : "lecroy-set --mode2 > log.txt 2>&1"
         },
         {
             "target": "operator",
@@ -128,36 +96,46 @@
         },
         {
             "target": "operator",
-            "description": "Verificare che il LED del PFC sia acceso\nVerificare sull'oscilloscopio che la tensione di uscita sia 750 V (+/- 10 V)"
+            "description": "Verificare che il LED del PFC sia acceso.\nVerificare sull'oscilloscopio che la tensione di uscita sia 750 V (+/- 10 V)."
         },
         {
             "target": "load",
             "electronicLoad": 0,
             "title": "Test ad alta tensione",
             "description": "",
-            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A).\nVerificare che la potenza impegnata sia minore di 1580 Watt.\nVerificare che il valore picco-picco sia minore di 20 V",
+            "finalDescription": "Immettere i valori di corrente e potenza misurati sul CA8333.\nVerificare che il valore picco-picco sia minore di 20 V.",
             "current": {
                 "target": 2.0,
                 "step": 0.5,
                 "period": 0.2
             },
-            "zeroWhenFinished": false
+            "manualCheck": {
+                "maxVariance": 1.5,
+                "min": 0.90
+            },
+	    "skippable" : true,
+            "zeroWhenFinished": "false"
         },
         {
             "target": "operator",
-            "description": "Rimuovere il limite di corrente dal selettore principale"
+            "description": "Rimuovere il limite di corrente dal selettore principale."
         },
         {
             "target": "load",
             "electronicLoad": 0,
             "title": "Test ad alta tensione",
             "description": "",
-            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 3900 Watt\nVerificare che il valore picco-picco sia minore di 20 V",
+            "finalDescription": "Immettere i valori di corrente e potenza misurati sul CA8333.\nVerificare che la potenza impegnata sia minore di 3900 Watt.\nVerificare che il valore picco-picco sia minore di 20 V.",
             "current": {
                 "target": 5.0,
                 "step": 0.5,
                 "period": 0.2
             },
+            "manualCheck": {
+                "maxVariance": 2,
+                "min": 0.95
+            },
+	    "skippable" : true,
             "zeroWhenFinished": false
         },
         {
@@ -165,12 +143,17 @@
             "electronicLoad": 0,
             "title": "Test ad alta tensione",
             "description": "",
-            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 7700 Watt.\nVerificare che il valore picco-picco sia minore di 20 V",
+            "finalDescription": "Immettere i valori di corrente e potenza misurati sul CA8333.\nVerificare che la potenza impegnata sia minore di 7700 Watt.\nVerificare che il valore picco-picco sia minore di 20 V",
             "current": {
                 "target": 10.0,
                 "step": 0.5,
                 "period": 0.2
             },
+            "manualCheck": {
+                "maxVariance": 2,
+                "min": 0.97
+            },
+	    "skippable" : true,
             "zeroWhenFinished": false
         },
         {
@@ -178,12 +161,17 @@
             "electronicLoad": 0,
             "title": "Test ad alta tensione",
             "description": "",
-            "finalDescription": "Verificare che le correnti sulle 3 fasi siano uguali tra loro (delta max: 1.5 A)\nVerificare che la potenza impegnata sia minore di 11500 Watt.\nVerificare che il valore picco-picco sia minore di 20 V",
+            "finalDescription": "Immettere i valori di corrente e potenza misurati sul CA8333.\nVerificare che la potenza impegnata sia minore di 11500 Watt.\nVerificare che il valore picco-picco sia minore di 20 V",
             "current": {
                 "target": 15.0,
                 "step": 0.5,
                 "period": 0.2
-            }
+            },
+            "manualCheck": {
+                "maxVariance": 2,
+                "min": 0.97
+            },
+	    "skippable" : true
         },
         {
             "target": "operator",
@@ -192,7 +180,29 @@
         },
         {
             "target": "operator",
-            "description": "COLLAUDO COMPLETATO.\nRimuovere la scheda"
+            "title": "Test PWM",
+            "description": "Scollegare le alimentazioni.\nCollegare il carico come da immagine.\n",
+            "images": "assets/pwm-test.jpg",
+	    "command" : "lecroy-set --mode3 > log.txt 2>&1"
+        },
+        {
+            "target": "operator",
+            "title": "Test PWM",
+            "description": "Chiudere lo sportello, sganciare l'emergenza, premere il pulsante \"ripristina ausiliari\""
+        },
+        {
+            "target": "pwm",
+            "title": "Test PWM",
+            "description": "Verificare che il segnale corrisponda all'immagine\n",
+            "electronicLoad": 1,
+            "voltage": 24,
+            "current": 1,
+            "images": "assets/LeCroy.jpg"
+        },
+        {
+            "target": "operator",
+            "title": "COMPLETAMENTO TEST",
+            "description": "Premere il tasto di emergenza e scollegare l'apparato.\nAttaccare l'etichetta.\nProseguire per scannerizzare il codice"
         }
     ]
 }

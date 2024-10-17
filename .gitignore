@@ -1,4 +1,8 @@
 # Miscellaneous
+*.exe
+mode1.txt
+mode2.txt
+mode3.txt
 tmp/
 .vim
 *.class

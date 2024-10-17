@@ -4,6 +4,13 @@ import 'package:optional/optional.dart';
 import 'package:result_type/result_type.dart';
 import 'package:result_type/src/result.dart';
 
+enum CurveTestStepState {
+  ready,
+  currentRamp,
+  voltageRamp,
+  done,
+}
+
 enum ElectronicLoad {
   current,
   voltage,
@@ -148,6 +155,7 @@ typedef Model = ({
   List<double> varianceValues,
   double differenceValue,
   List<List<double>> testData,
+  CurveTestStepState curveTestStepState,
 });
 
 final Model defaultModel = (
@@ -177,6 +185,7 @@ final Model defaultModel = (
   varianceValues: [],
   differenceValue: 0,
   testData: [],
+  curveTestStepState: CurveTestStepState.ready,
 );
 
 extension Impl on Model {
@@ -193,6 +202,7 @@ extension Impl on Model {
     List<double>? varianceValues,
     double? differenceValue,
     List<List<double>>? testData,
+    CurveTestStepState? curveTestStepState,
   }) =>
       (
         reportsPath: reportsPath ?? this.reportsPath,
@@ -209,7 +219,11 @@ extension Impl on Model {
         varianceValues: varianceValues ?? this.varianceValues,
         differenceValue: differenceValue ?? this.differenceValue,
         testData: testData ?? this.testData,
+        curveTestStepState: curveTestStepState ?? this.curveTestStepState,
       );
+
+  Model resetStep() =>
+      this.copyWith(curveTestStepState: CurveTestStepState.ready);
 
   Model updateVarianceValue(int index, double value) {
     List<double> newValues = List.from(this.varianceValues);
@@ -242,10 +256,12 @@ extension Impl on Model {
         ]);
       }
 
-      var newModel = this.copyWith(
-          testData: testData,
-          testIndex:
-              (this.testIndex + 1) % this.testSteps.value.success.length);
+      var newModel = this
+          .copyWith(
+              testData: testData,
+              testIndex:
+                  (this.testIndex + 1) % this.testSteps.value.success.length)
+          .resetStep();
 
       if (newModel.testIndex == 0) {
         newModel = newModel.copyWith(testData: []);
@@ -403,7 +419,11 @@ extension Impl on Model {
     if (testStep != null) {
       if (testStep is LoadTestStep && testStep.checkParameters.isPresent) {
         final power = this.getPower(testStep.electronicLoad);
-        return this.differenceValue / power;
+        if (this.differenceValue != 0) {
+          return power / this.differenceValue;
+        } else {
+          return 0;
+        }
       } else {
         return 0;
       }
@@ -416,8 +436,8 @@ extension Impl on Model {
     final testStep = this.getTestStep();
     if (testStep != null) {
       if (testStep is LoadTestStep && testStep.checkParameters.isPresent) {
-        return _isWithinRange(this.getPowerCheckRatio(),
-            testStep.checkParameters.value.minValue, 1.0);
+        final ratio = this.getPowerCheckRatio();
+        return ratio >= testStep.checkParameters.value.minValue && ratio <= 1.0;
       } else {
         return false;
       }

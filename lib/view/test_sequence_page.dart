@@ -7,41 +7,13 @@ import 'package:mks_eol/controller/view_updater.dart';
 import 'package:mks_eol/model/model.dart';
 import 'package:mks_eol/services/logger.dart';
 
-enum _CurveTestStepState {
-  ready,
-  currentRamp,
-  voltageRamp,
-  done,
-}
-
-class _CurveTestStepCubit extends Cubit<_CurveTestStepState> {
-  _CurveTestStepCubit() : super(_CurveTestStepState.ready);
-
-  void startCurrentRamp() {
-    this.emit(_CurveTestStepState.currentRamp);
-  }
-
-  void startVoltageRamp() {
-    this.emit(_CurveTestStepState.voltageRamp);
-  }
-
-  void rampDone() {
-    this.emit(_CurveTestStepState.done);
-  }
-
-  void resetStep() {
-    this.emit(_CurveTestStepState.ready);
-  }
-}
-
 class TestSequencePage extends StatelessWidget {
   const TestSequencePage({super.key});
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: BlocProvider(
-          create: (_) => _CurveTestStepCubit(), child: _TestSequenceView()),
+      body: _TestSequenceView(),
     );
   }
 }
@@ -170,8 +142,9 @@ class _FinalTestStepWidget extends StatelessWidget {
 
 class _CheckTestStepView extends StatefulWidget {
   final CheckParameters parameters;
+  final ElectronicLoad electronicLoad;
 
-  const _CheckTestStepView(this.parameters);
+  const _CheckTestStepView(this.parameters, this.electronicLoad);
 
   @override
   State<_CheckTestStepView> createState() => _CheckTestStepState();
@@ -188,6 +161,16 @@ class _CheckTestStepState extends State<_CheckTestStepView> {
   @override
   Widget build(BuildContext context) {
     final model = context.watch<ViewUpdater>().state;
+    OutlineInputBorder getOutline(bool condition) => OutlineInputBorder(
+        borderSide:
+            BorderSide(width: 4, color: condition ? Colors.green : Colors.red));
+
+    final ternaryOutline = getOutline(model.isTernaryCheckOk() &&
+        this.ternaryControllers[0].text.isNotEmpty &&
+        this.ternaryControllers[1].text.isNotEmpty &&
+        this.ternaryControllers[2].text.isNotEmpty);
+    final powerOutline = getOutline(
+        model.isPowerCheckOk() && this.powerController.text.isNotEmpty);
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -199,55 +182,49 @@ class _CheckTestStepState extends State<_CheckTestStepView> {
           Wrap(
               spacing: 32,
               runSpacing: 32,
-              children: List.generate(
-                  3,
-                  (index) => SizedBox(
-                      width: 200,
-                      child: TextField(
-                        controller: this.ternaryControllers[index],
-                        decoration: InputDecoration(
-                            border: OutlineInputBorder(
-                                borderSide: BorderSide(
-                                    width: 4,
-                                    color: model.isTernaryCheckOk() &&
-                                            this
-                                                .ternaryControllers[index]
-                                                .text
-                                                .isNotEmpty
-                                        ? Colors.green
-                                        : Colors.red))),
-                        keyboardType: const TextInputType.numberWithOptions(
-                            decimal: true),
-                        inputFormatters: <TextInputFormatter>[
-                          FilteringTextInputFormatter.allow(
-                              RegExp(r'(^-?\d*\.?\d*)'))
-                        ],
-                        onChanged: (value) {
-                          final viewUpdater = context.read<ViewUpdater>();
-                          final doubleValue = double.tryParse(value);
+              children: List.generate(3, (index) {
+                return SizedBox(
+                    width: 200,
+                    child: TextField(
+                      controller: this.ternaryControllers[index],
+                      decoration: InputDecoration(
+                        border: ternaryOutline,
+                        enabledBorder: ternaryOutline,
+                        focusedBorder: ternaryOutline,
+                      ),
+                      keyboardType:
+                          const TextInputType.numberWithOptions(decimal: true),
+                      inputFormatters: <TextInputFormatter>[
+                        FilteringTextInputFormatter.allow(
+                            RegExp(r'(^-?\d*\.?\d*)'))
+                      ],
+                      onChanged: (value) {
+                        final viewUpdater = context.read<ViewUpdater>();
+                        final doubleValue = double.tryParse(value);
 
-                          if (doubleValue != null) {
-                            viewUpdater.updateVarianceValue(index, doubleValue);
-                          }
-                        },
-                      )))),
+                        if (doubleValue != null) {
+                          this.setState(() {
+                            this.ternaryControllers[index].text = value;
+                          });
+                          viewUpdater.updateVarianceValue(index, doubleValue);
+                        }
+                      },
+                    ));
+              })),
         ])),
         Expanded(
           child: Column(children: [
             Text(
-                "Il rapporto tra la potenza e il seguente valore (${model.getPowerCheckRatio().toStringAsFixed(2)}) deve essere tra ${this.widget.parameters.minValue.toStringAsFixed(2)} e 1.00"),
+                "Il rapporto tra la potenza (${model.getPower(this.widget.electronicLoad).toStringAsFixed(2)}) e il seguente valore (${model.getPowerCheckRatio().toStringAsFixed(2)}) deve essere tra ${this.widget.parameters.minValue.toStringAsFixed(2)} e 1.00"),
             SizedBox(
                 width: 200,
                 child: TextField(
                   controller: this.powerController,
                   decoration: InputDecoration(
-                      border: OutlineInputBorder(
-                          borderSide: BorderSide(
-                              width: 4,
-                              color: model.isPowerCheckOk() &&
-                                      this.powerController.text.isNotEmpty
-                                  ? Colors.green
-                                  : Colors.red))),
+                    border: powerOutline,
+                    enabledBorder: powerOutline,
+                    focusedBorder: powerOutline,
+                  ),
                   keyboardType:
                       const TextInputType.numberWithOptions(decimal: true),
                   inputFormatters: <TextInputFormatter>[
@@ -258,6 +235,9 @@ class _CheckTestStepState extends State<_CheckTestStepView> {
                     final doubleValue = double.tryParse(value);
 
                     if (doubleValue != null) {
+                      this.setState(() {
+                        this.powerController.text = value;
+                      });
                       viewUpdater.updateDifferenceValue(doubleValue);
                     }
                   },
@@ -298,7 +278,7 @@ class _DescriptiveTestStepView extends StatelessWidget {
         ])),
         if (this.testStep.delay == null || waitTime <= 0) ...[
           const SizedBox(height: 32),
-          _bottom(this.testStep, context)
+          _bottom(this.testStep, context, skippable: this.testStep.skippable)
         ],
         if (this.testStep.delay != null && waitTime > 0) ...[
           waitTime == 1
@@ -318,7 +298,6 @@ class _PwmTestStepView extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final model = context.watch<ViewUpdater>().state;
-    final state = context.watch<_CurveTestStepCubit>().state;
 
     return Column(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -349,7 +328,9 @@ class _PwmTestStepView extends StatelessWidget {
               _skipButton(
                   () => context.read<ViewUpdater>().moveToNextStep(skip: true)),
             _proceedButton(_testStepCallback(this.testStep, context),
-                text: state == _CurveTestStepState.ready ? "Start" : null),
+                text: model.curveTestStepState == CurveTestStepState.ready
+                    ? "Start"
+                    : null),
           ],
         ),
       ],
@@ -364,7 +345,7 @@ class _CurveTestStepView extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final state = context.watch<_CurveTestStepCubit>().state;
+    final model = context.watch<ViewUpdater>().state;
 
     return Column(mainAxisAlignment: MainAxisAlignment.spaceBetween, children: [
       Expanded(
@@ -378,28 +359,29 @@ class _CurveTestStepView extends StatelessWidget {
             ),
           const SizedBox(height: 32),
           Column(children: [
-            switch (state) {
-              _CurveTestStepState.ready => Text(
+            switch (model.curveTestStepState) {
+              CurveTestStepState.ready => Text(
                   "Test di raggiungimento ${this.testStep.currentCurve?.target ?? 0.0} A / ${this.testStep.voltageCurve?.target ?? 0.0} V"),
-              _CurveTestStepState.voltageRamp =>
+              CurveTestStepState.voltageRamp =>
                 const Text("Incremento della tensione in corso..."),
-              _CurveTestStepState.currentRamp =>
+              CurveTestStepState.currentRamp =>
                 const Text("Incremento della corrente in corso..."),
-              _CurveTestStepState.done => const SizedBox(),
+              CurveTestStepState.done => const SizedBox(),
             },
           ]),
-          state == _CurveTestStepState.done
+          model.curveTestStepState == CurveTestStepState.done
               ? Text(this.testStep.finalDescription)
               : Text(this.testStep.description),
           const SizedBox(height: 32),
-          if (state != _CurveTestStepState.done &&
+          if (model.curveTestStepState != CurveTestStepState.done &&
               this.testStep.imagePaths.isNotEmpty)
             Expanded(flex: 2, child: _imageWrap(this.testStep.imagePaths)),
-          if (state == _CurveTestStepState.done &&
+          if (model.curveTestStepState == CurveTestStepState.done &&
               this.testStep.checkParameters.isPresent)
             Expanded(
                 flex: 2,
-                child: _CheckTestStepView(this.testStep.checkParameters.value))
+                child: _CheckTestStepView(this.testStep.checkParameters.value,
+                    this.testStep.electronicLoad))
         ],
       )),
       const SizedBox(height: 32),
@@ -507,18 +489,16 @@ void Function()? _testStepCallback(TestStep testStep, BuildContext context) {
       };
     case LoadTestStep testStep:
       {
-        final state = context.watch<_CurveTestStepCubit>().state;
         final model = context.watch<ViewUpdater>().state;
+        final state = model.curveTestStepState;
 
         final electronicLoad = testStep.electronicLoad;
 
         return switch (state) {
-          _CurveTestStepState.ready => () async {
-              final stateCubit = context.read<_CurveTestStepCubit>();
+          CurveTestStepState.ready => () async {
               final viewUpdater = context.read<ViewUpdater>();
 
               if (testStep.currentCurve != null) {
-                stateCubit.startCurrentRamp();
                 await viewUpdater.currentCurve(
                   electronicLoad,
                   testStep.currentCurve!.target,
@@ -527,7 +507,6 @@ void Function()? _testStepCallback(TestStep testStep, BuildContext context) {
                 );
               }
               if (testStep.voltageCurve != null) {
-                stateCubit.startVoltageRamp();
                 await viewUpdater.voltageCurve(
                   electronicLoad,
                   testStep.voltageCurve!.target,
@@ -535,16 +514,12 @@ void Function()? _testStepCallback(TestStep testStep, BuildContext context) {
                   testStep.voltageCurve!.period,
                 );
               }
-
-              stateCubit.rampDone();
             },
-          _CurveTestStepState.done => model.canProceed()
+          CurveTestStepState.done => model.canProceed()
               ? () async {
                   final viewUpdater = context.read<ViewUpdater>();
-                  final stateCubit = context.read<_CurveTestStepCubit>();
 
                   await viewUpdater.moveToNextStep();
-                  stateCubit.resetStep();
                 }
               : null,
           _ => null,
