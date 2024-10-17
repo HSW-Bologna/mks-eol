@@ -146,6 +146,8 @@ typedef Model = ({
   String reportsPath,
   String firstElectronicLoadAddress,
   String secondElectronicLoadAddress,
+  int firstElectronicLoadPort,
+  int secondElectronicLoadPort,
   Optional<Result<ModbusPorts, String>> ports,
   ElectronicLoadState currentElectronicLoadState,
   ElectronicLoadState voltageElectronicLoadState,
@@ -164,6 +166,8 @@ final Model defaultModel = (
   reportsPath: "",
   firstElectronicLoadAddress: "",
   secondElectronicLoadAddress: "",
+  firstElectronicLoadPort: 502,
+  secondElectronicLoadPort: 502,
   ports: const Optional.empty(),
   currentElectronicLoadState: (
     voltage: 0,
@@ -197,6 +201,8 @@ extension Impl on Model {
     String? reportsPath,
     String? firstElectronicLoadAddress,
     String? secondElectronicLoadAddress,
+    int? firstElectronicLoadPort,
+    int? secondElectronicLoadPort,
     Optional<Result<ModbusPorts, String>>? ports,
     ElectronicLoadState? currentElectronicLoadState,
     ElectronicLoadState? voltageElectronicLoadState,
@@ -216,6 +222,10 @@ extension Impl on Model {
             firstElectronicLoadAddress ?? this.firstElectronicLoadAddress,
         secondElectronicLoadAddress:
             secondElectronicLoadAddress ?? this.secondElectronicLoadAddress,
+        firstElectronicLoadPort:
+            firstElectronicLoadPort ?? this.firstElectronicLoadPort,
+        secondElectronicLoadPort:
+            secondElectronicLoadPort ?? this.secondElectronicLoadPort,
         ports: ports ?? this.ports,
         currentElectronicLoadState:
             currentElectronicLoadState ?? this.currentElectronicLoadState,

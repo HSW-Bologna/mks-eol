@@ -29,6 +29,8 @@ const String _jsonTargetOperator = "operator";
 const String _jsonTargetLoad = "load";
 const String _jsonFirstLoadIp = "firstLoadIp";
 const String _jsonSecondLoadIp = "secondLoadIp";
+const String _jsonFirstLoadPort = "firstLoadPort";
+const String _jsonSecondLoadPort = "secondLoadPort";
 const String _jsonTargetPwm = "pwm";
 const String _jsonManualCheck = "manualCheck";
 const String _jsonSkippable = "skippable";
@@ -63,6 +65,9 @@ class ViewUpdater extends Cubit<Model> {
       final reportsPath = cast<String?>(jsonContent[_jsonReportsPath]) ?? "";
       final firstLoadIp = cast<String?>(jsonContent[_jsonFirstLoadIp]) ?? "";
       final secondLoadIp = cast<String?>(jsonContent[_jsonSecondLoadIp]) ?? "";
+      final firstLoadPort = cast<int?>(jsonContent[_jsonFirstLoadPort]) ?? 502;
+      final secondLoadPort =
+          cast<int?>(jsonContent[_jsonSecondLoadPort]) ?? 502;
 
       this.emit(this
           .state
@@ -71,6 +76,8 @@ class ViewUpdater extends Cubit<Model> {
             reportsPath: reportsPath,
             firstElectronicLoadAddress: firstLoadIp,
             secondElectronicLoadAddress: secondLoadIp,
+            firstElectronicLoadPort: firstLoadPort,
+            secondElectronicLoadPort: secondLoadPort,
           ));
       logger.i("Correct JSON");
     } catch (e, s) {
@@ -146,14 +153,16 @@ class ViewUpdater extends Cubit<Model> {
             ports: Optional.of(Failure(
                 "Indirizzo IP del primo carico (${this.state.firstElectronicLoadAddress}) non valido"))));
       } else {
-        final serverIp = await ModbusClientTcp.discover(firstAddress.address);
+        final serverIp = await ModbusClientTcp.discover(firstAddress.address,
+            serverPort: this.state.firstElectronicLoadPort);
         if (serverIp == null) {
           this.emit(this.state.copyWith(
               ports: Optional.of(
                   Failure("Impossibile connettersi al primo carico"))));
         } else {
           // Create the modbus client.
-          firstPort = ModbusClientTcp(serverIp, unitId: 1);
+          firstPort = ModbusClientTcp(serverIp,
+              serverPort: this.state.firstElectronicLoadPort, unitId: 1);
         }
       }
 
@@ -164,14 +173,16 @@ class ViewUpdater extends Cubit<Model> {
             ports: Optional.of(Failure(
                 "Indirizzo IP del secondo carico (${this.state.secondElectronicLoadAddress}) non valido"))));
       } else {
-        final serverIp = await ModbusClientTcp.discover(secondAddress.address);
+        final serverIp = await ModbusClientTcp.discover(secondAddress.address,
+            serverPort: this.state.secondElectronicLoadPort);
         if (serverIp == null) {
           this.emit(this.state.copyWith(
               ports: Optional.of(
                   Failure("Impossibile connettersi al secondo carico"))));
         } else {
           // Create the modbus client.
-          secondPort = ModbusClientTcp(serverIp, unitId: 1);
+          secondPort = ModbusClientTcp(serverIp,
+              serverPort: this.state.secondElectronicLoadPort, unitId: 1);
         }
       }
 

@@ -1,6 +1,8 @@
 {
     "firstLoadIp": "127.0.0.1",
+    "firstLoadPort": 5025,
     "secondLoadIp": "127.0.0.1",
+    "secondLoadPort": 5025,
     "reportsPath":"report-collaudo.csv",
     "steps": [
         {
